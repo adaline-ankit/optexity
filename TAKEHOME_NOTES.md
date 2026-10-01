@@ -8,6 +8,7 @@ Run browser-use once, record actual tool execution evidence, compile a narrow na
 - Compiler checks schema, objective hash, run identity, action order, completion, errors, execution evidence, redaction, and target scope.
 - Input/click become command-only native nodes. Waits remain native sleeps; terminal `done` is removed. Other actions are rejected.
 - Compilation replaces one top-level agentic node and preserves surrounding nodes, including outcome checks.
+- Each trace row must contain one matching action with supported parameters. Unknown semantics are rejected, not silently discarded; for example, an input containing `press_enter` cannot be compiled by this prototype.
 - `strict_replay` prevents both normal prompt fallback and the outer LLM error classifier.
 - Literal LLM-assisted compilation and iterative optimization bonuses are not implemented.
 
@@ -81,7 +82,17 @@ Traces and receipts are in `evidence/`. Each generated JSON has a `.provenance.j
 ../.venv/bin/python -m unittest discover -s ../browser-use/tests/takehome -v
 ```
 
-20 compiler/policy tests, 3 real-Chromium selector/oracle tests, and 5 recorder tests passed. Live RoboForm learning/replay, Books capture/replay, broken-selector failure, and actual platform task also passed their stated checks. Targeted Ruff error checks, Python compilation, schema validation and `git diff --check` passed. These are focused checks, not a claim that the entire upstream test suites were run.
+25 compiler/policy tests, 3 real-Chromium selector/oracle tests, and 6 recorder tests passed in the final submission review on 2 October 2026 (34 total). Added checks cover unsupported input parameters, multiple actions in one row, boolean click counts, preservation of click options, invalid waits, and unchanged metadata when tracing is disabled. Live RoboForm learning/replay, Books capture/replay, broken-selector failure, and actual platform task previously passed their stated checks. The review regenerated both cached recipes and confirmed unchanged JSON output. Repository-pinned Black/isort and Ruff checks, Python compilation, schema validation and `git diff --check` passed for the relevant change surfaces. These are focused checks, not a claim that the entire upstream test suites were run. The GitHub Sourcery check is automated review, not test CI.
+
+## Reviewer reading order
+
+1. `test_automation.json` and `test_automation_cached.json`: objective, native output, and preserved oracle.
+2. Companion recorder and tool hooks: where target evidence originates.
+3. `scripts/compile_cached_automation.py`: validation and translation.
+4. `InteractionAction.strict_replay` and `run_interaction.py`: reuse existing input/click handlers and stop model recovery on strict failures.
+5. `tests/` and `evidence/`: positive/negative checks and stated limits.
+
+The implementation adds no production dependencies or parallel replay engine. Small functions handle trace capture and compilation; existing Pydantic schemas, node dispatch, browser handlers, and exception types remain the execution path.
 
 ## Important boundaries
 
@@ -92,3 +103,5 @@ Traces and receipts are in `evidence/`. Each generated JSON has a `.provenance.j
 - ContextVars isolate configuration, not shared files or browser ownership. Use unique per-run directories. Mixed run IDs are rejected.
 - Trusted automation files can contain Python/locator expressions executed by the existing engine. The compiler emits quoted fixed templates; the engine is not a sandbox for arbitrary files.
 - No semantic action pruning is claimed. Real actions and waits are retained because a single trace cannot prove their side effects irrelevant.
+- Ordering checks do not establish trace completeness: an ordered trace with a missing action can still compile. The task hash binds objective text, not website origin, and compilation does not require a baseline oracle-success receipt. Current manual promotion must inspect baseline and replay results; automatic promotion needs a finalized manifest, environment binding, and oracle receipt.
+- Compiler click-option tests validate translation of supplied trace parameters. The current browser-use recorder emits the supported click index only; end-to-end right-click/double-click capture is not claimed.

@@ -7,5 +7,6 @@ Synthetic RoboForm and public Books examples only. No credentials, full conversa
 - Baseline/replay JSON receipts: engine outcome, elapsed time, current LiteLLM boundary counters. Local `/tmp` paths identify original logs and may expire.
 - `broken-selector.json`: expected failed replay with zero model attempts.
 - `platform-status.json`: separately verified hosted Tasks receipt and outstanding setup distinctions.
+- `final-review.json`: 2 October submission hardening, 34 focused tests, and fresh scripted Books capture/native replay. Required Recorder onboarding remains incomplete.
 
 Recompile using commands in TAKEHOME_NOTES.md. Generated `.provenance.json` records hashes and retains/drops. One timing pair does not establish general performance.

@@ -78,8 +78,9 @@ def measure_llm_calls(forbid: bool):
     This is a local harness, not a network firewall. Both current Optexity model
     adapters route calls here. New SDK integrations need their own guard.
     """
-    import litellm
     from unittest.mock import patch
+
+    import litellm
 
     metrics = {"attempts": 0, "prompt_tokens": 0, "completion_tokens": 0}
     original_sync, original_async = litellm.completion, litellm.acompletion

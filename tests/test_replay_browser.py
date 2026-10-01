@@ -7,7 +7,9 @@ import html
 import json
 import unittest
 from pathlib import Path
-from patchright.async_api import async_playwright, Error
+
+from patchright.async_api import Error, async_playwright
+
 from scripts.compile_cached_automation import _command_from_target
 
 

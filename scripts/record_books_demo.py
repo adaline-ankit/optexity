@@ -19,11 +19,12 @@ from scripts.run_local_automation import (
 
 async def record_books(output_dir: Path) -> Path:
     from browser_use.agent.optexity_step_cache import trace_actions_to
+    from patchright.async_api import expect
+
     from optexity.inference import child_process
     from optexity.inference.infra.browser import Browser
     from optexity.inference.models import normalize_model
     from optexity.schema.memory import Memory
-    from patchright.async_api import expect
 
     automation = _load_automation(Path("test_automation_books.json"))
     task = _build_task(automation, output_dir, "openai/gpt-4.1-mini")

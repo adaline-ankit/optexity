@@ -1,7 +1,7 @@
 import argparse
 import hashlib
-import math
 import json
+import math
 import re
 from pathlib import Path
 from typing import Any
@@ -72,10 +72,24 @@ def _command_from_target(target: dict[str, Any]) -> str:
 
 
 def _action_params(row: dict[str, Any]) -> dict[str, Any]:
-    action = row.get("action") or {}
-    params = action.get(row.get("action_name")) or {}
+    name = row.get("action_name")
+    allowed = {
+        "input": {"index", "text", "clear"},
+        "click": {"index", "button", "click_count"},
+        "wait": {"seconds"},
+        "done": {"success"},
+    }
+    if name not in allowed:
+        raise ValueError(f"Unsupported cached action: {name}")
+    action = row.get("action")
+    if not isinstance(action, dict) or set(action) != {name}:
+        raise ValueError("Trace row must contain exactly one matching action")
+    params = action[name]
     if not isinstance(params, dict):
-        raise ValueError(f"Invalid action params: {row}")
+        raise ValueError(f"Invalid parameters for {name}")
+    unsupported = set(params) - allowed[name]
+    if unsupported:
+        raise ValueError(f"Unsupported {name} parameters: {sorted(unsupported)}")
     return params
 
 
@@ -90,10 +104,11 @@ def _compile_row(row: dict[str, Any]) -> dict[str, Any] | None:
     name = row.get("action_name")
     if row.get("result", {}).get("error"):
         raise ValueError("Cannot compile failed action")
+    params = _action_params(row)
     if name == "done":
         return None
     if name == "wait":
-        seconds = _action_params(row).get("seconds")
+        seconds = params.get("seconds")
         if (
             type(seconds) not in (int, float)
             or not math.isfinite(seconds)
@@ -113,7 +128,6 @@ def _compile_row(row: dict[str, Any]) -> dict[str, Any] | None:
         raise ValueError(f"Action {name!r} has no cached target")
 
     command = _command_from_target(target)
-    params = _action_params(row)
 
     if name == "input":
         _raise_if_redacted(row)
@@ -154,6 +168,8 @@ def _compile_row(row: dict[str, Any]) -> dict[str, Any] | None:
             click["button"] = button
         click_count = params.get("click_count")
         if click_count is not None:
+            if type(click_count) is not int:
+                raise ValueError("Unsupported click_count: expected integer")
             if click_count == 2:
                 click["double_click"] = True
             elif click_count != 1:
@@ -254,9 +270,11 @@ def main() -> None:
                 "step": r["step_number"],
                 "action": r["action_number"],
                 "name": r["action_name"],
-                "decision": "drop terminal bookkeeping"
-                if r["action_name"] == "done"
-                else "retain; no evidence of redundancy",
+                "decision": (
+                    "drop terminal bookkeeping"
+                    if r["action_name"] == "done"
+                    else "retain; no evidence of redundancy"
+                ),
             }
             for r in _read_trace(args.trace)
         ],

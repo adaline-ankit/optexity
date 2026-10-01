@@ -596,9 +596,13 @@ async def task_processor():
                     from optexity.schema.automation import Automation
 
                     with open(local_automation_path) as local_file:
-                        task.automation = Automation.model_validate(json.load(local_file))
+                        task.automation = Automation.model_validate(
+                            json.load(local_file)
+                        )
                     fetch_success = True
-                    logger.info("Loaded local automation from %s", local_automation_path)
+                    logger.info(
+                        "Loaded local automation from %s", local_automation_path
+                    )
                 except (OSError, ValueError) as local_error:
                     fetch_success = False
                     automation_error = f"Invalid local automation: {local_error}"

@@ -6,12 +6,12 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from scripts.compile_cached_automation import (
-    compile_cached_automation,
-    _compile_row,
-    _command_from_target,
-)
 from optexity.schema.actions.interaction_action import InteractionAction
+from scripts.compile_cached_automation import (
+    _command_from_target,
+    _compile_row,
+    compile_cached_automation,
+)
 
 
 def row(name="input", **overrides):
@@ -88,6 +88,56 @@ class CompilerTests(unittest.TestCase):
     def test_unsupported_action_rejected(self):
         with self.assertRaisesRegex(ValueError, "Unsupported cached action"):
             self.compile([row("scroll"), done()])
+
+    def test_unknown_input_semantics_rejected(self):
+        with self.assertRaisesRegex(ValueError, "Unsupported input parameters"):
+            self.compile(
+                [
+                    row(
+                        action={
+                            "input": {"index": 1, "text": "hello", "press_enter": True}
+                        }
+                    ),
+                    done(),
+                ]
+            )
+
+    def test_multiple_actions_in_one_row_rejected(self):
+        with self.assertRaisesRegex(ValueError, "exactly one matching action"):
+            self.compile(
+                [
+                    row(action={"input": {"text": "hello"}, "click": {"index": 1}}),
+                    done(),
+                ]
+            )
+
+    def test_boolean_click_count_rejected(self):
+        with self.assertRaisesRegex(ValueError, "click_count"):
+            self.compile(
+                [
+                    row("click", action={"click": {"index": 1, "click_count": True}}),
+                    done(),
+                ]
+            )
+
+    def test_click_options_preserved(self):
+        node = _compile_row(
+            row(
+                "click",
+                action={"click": {"index": 1, "button": "right", "click_count": 2}},
+            )
+        )
+        action = node["interaction_action"]["click_element"]
+        self.assertEqual(action["button"], "right")
+        self.assertTrue(action["double_click"])
+
+    def test_invalid_wait_rejected(self):
+        for seconds in (True, -1, 61, float("inf"), float("nan")):
+            with (
+                self.subTest(seconds=seconds),
+                self.assertRaisesRegex(ValueError, "wait"),
+            ):
+                _compile_row(row("wait", action={"wait": {"seconds": seconds}}))
 
     def test_reject_failed_action(self):
         with self.assertRaisesRegex(ValueError, "failed"):
@@ -175,6 +225,7 @@ class ReplayPolicyTests(unittest.IsolatedAsyncioTestCase):
         os.environ.setdefault("OPTEXITY_API_KEY", "local")
         from types import SimpleNamespace
         from unittest.mock import AsyncMock, patch
+
         from optexity.exceptions import AssertLocatorPresenceException
         from optexity.inference.core.run_interaction import run_interaction_action
 
@@ -202,8 +253,9 @@ class ReplayPolicyTests(unittest.IsolatedAsyncioTestCase):
             fallback.assert_not_awaited()
 
     async def test_llm_guard_blocks_and_counts_attempt(self):
-        from scripts.run_local_automation import measure_llm_calls
         import litellm
+
+        from scripts.run_local_automation import measure_llm_calls
 
         with measure_llm_calls(True) as metrics:
             with self.assertRaisesRegex(RuntimeError, "forbidden"):
