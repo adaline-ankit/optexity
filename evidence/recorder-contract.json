@@ -1,0 +1,217 @@
+{
+  "resettable": true,
+  "cases": [
+    {
+      "name": "captured",
+      "input_parameters": {
+        "full_name": [
+          "myname"
+        ],
+        "address_line_1": [
+          "xyz"
+        ],
+        "address_line_2": [
+          "abc"
+        ],
+        "city": [
+          "SF"
+        ]
+      },
+      "oracle": {
+        "type": "action_node",
+        "end_sleep_time": 0,
+        "python_script_action": {
+          "execution_code": "async def code_fn(page):\n    from patchright.async_api import expect\n    expected = {'04fullname': 'myname', '10address1': 'xyz', '11address2': 'abc', '13adr_city': 'SF'}\n    for name, value in expected.items():\n        try:\n            await expect(page.locator('input[name=\"' + name + '\"]')).to_have_value(value, timeout=500)\n        except AssertionError:\n            raise AssertionError('oracle:' + name) from None\n"
+        }
+      },
+      "probes": [
+        {
+          "name": "corrupt-full_name",
+          "node": {
+            "type": "action_node",
+            "interaction_action": {
+              "input_text": {
+                "command": "locator(\"input[name=\\\"\\\\30 4fullname\\\"]\")",
+                "prompt_instructions": "Enter the full name '{full_name[0]}' into the text field.",
+                "input_text": "__wrong__",
+                "skip_prompt": true,
+                "assert_locator_presence": true
+              },
+              "strict_replay": true,
+              "max_tries": 1,
+              "max_timeout_seconds_per_try": 3
+            },
+            "end_sleep_time": 0
+          },
+          "expected_error": "oracle:04fullname"
+        },
+        {
+          "name": "corrupt-address_line_1",
+          "node": {
+            "type": "action_node",
+            "interaction_action": {
+              "input_text": {
+                "command": "locator(\"input[name=\\\"\\\\31 0address1\\\"]\")",
+                "prompt_instructions": "Enter the first address line '{address_line_1[0]}' into the text field.",
+                "input_text": "__wrong__",
+                "skip_prompt": true,
+                "assert_locator_presence": true
+              },
+              "strict_replay": true,
+              "max_tries": 1,
+              "max_timeout_seconds_per_try": 3
+            },
+            "end_sleep_time": 0
+          },
+          "expected_error": "oracle:10address1"
+        },
+        {
+          "name": "corrupt-address_line_2",
+          "node": {
+            "type": "action_node",
+            "interaction_action": {
+              "input_text": {
+                "command": "locator(\"input[name=\\\"\\\\31 1address2\\\"]\")",
+                "prompt_instructions": "Enter the second address line '{address_line_2[0]}' into the text field.",
+                "input_text": "__wrong__",
+                "skip_prompt": true,
+                "assert_locator_presence": true
+              },
+              "strict_replay": true,
+              "max_tries": 1,
+              "max_timeout_seconds_per_try": 3
+            },
+            "end_sleep_time": 0
+          },
+          "expected_error": "oracle:11address2"
+        },
+        {
+          "name": "corrupt-city",
+          "node": {
+            "type": "action_node",
+            "interaction_action": {
+              "input_text": {
+                "command": "locator(\"input[name=\\\"\\\\31 3adr_city\\\"]\")",
+                "prompt_instructions": "Enter the city '{city[0]}' into the text field.",
+                "input_text": "__wrong__",
+                "skip_prompt": true,
+                "assert_locator_presence": true
+              },
+              "strict_replay": true,
+              "max_tries": 1,
+              "max_timeout_seconds_per_try": 3
+            },
+            "end_sleep_time": 0
+          },
+          "expected_error": "oracle:13adr_city"
+        }
+      ]
+    },
+    {
+      "name": "different-data",
+      "input_parameters": {
+        "full_name": [
+          "Ada Lovelace"
+        ],
+        "address_line_1": [
+          "42 Test Road"
+        ],
+        "address_line_2": [
+          "Unit 7"
+        ],
+        "city": [
+          "New Delhi"
+        ]
+      },
+      "oracle": {
+        "type": "action_node",
+        "end_sleep_time": 0,
+        "python_script_action": {
+          "execution_code": "async def code_fn(page):\n    from patchright.async_api import expect\n    expected = {'04fullname': 'Ada Lovelace', '10address1': '42 Test Road', '11address2': 'Unit 7', '13adr_city': 'New Delhi'}\n    for name, value in expected.items():\n        try:\n            await expect(page.locator('input[name=\"' + name + '\"]')).to_have_value(value, timeout=500)\n        except AssertionError:\n            raise AssertionError('oracle:' + name) from None\n"
+        }
+      },
+      "probes": [
+        {
+          "name": "corrupt-full_name",
+          "node": {
+            "type": "action_node",
+            "interaction_action": {
+              "input_text": {
+                "command": "locator(\"input[name=\\\"\\\\30 4fullname\\\"]\")",
+                "prompt_instructions": "Enter the full name '{full_name[0]}' into the text field.",
+                "input_text": "__wrong__",
+                "skip_prompt": true,
+                "assert_locator_presence": true
+              },
+              "strict_replay": true,
+              "max_tries": 1,
+              "max_timeout_seconds_per_try": 3
+            },
+            "end_sleep_time": 0
+          },
+          "expected_error": "oracle:04fullname"
+        },
+        {
+          "name": "corrupt-address_line_1",
+          "node": {
+            "type": "action_node",
+            "interaction_action": {
+              "input_text": {
+                "command": "locator(\"input[name=\\\"\\\\31 0address1\\\"]\")",
+                "prompt_instructions": "Enter the first address line '{address_line_1[0]}' into the text field.",
+                "input_text": "__wrong__",
+                "skip_prompt": true,
+                "assert_locator_presence": true
+              },
+              "strict_replay": true,
+              "max_tries": 1,
+              "max_timeout_seconds_per_try": 3
+            },
+            "end_sleep_time": 0
+          },
+          "expected_error": "oracle:10address1"
+        },
+        {
+          "name": "corrupt-address_line_2",
+          "node": {
+            "type": "action_node",
+            "interaction_action": {
+              "input_text": {
+                "command": "locator(\"input[name=\\\"\\\\31 1address2\\\"]\")",
+                "prompt_instructions": "Enter the second address line '{address_line_2[0]}' into the text field.",
+                "input_text": "__wrong__",
+                "skip_prompt": true,
+                "assert_locator_presence": true
+              },
+              "strict_replay": true,
+              "max_tries": 1,
+              "max_timeout_seconds_per_try": 3
+            },
+            "end_sleep_time": 0
+          },
+          "expected_error": "oracle:11address2"
+        },
+        {
+          "name": "corrupt-city",
+          "node": {
+            "type": "action_node",
+            "interaction_action": {
+              "input_text": {
+                "command": "locator(\"input[name=\\\"\\\\31 3adr_city\\\"]\")",
+                "prompt_instructions": "Enter the city '{city[0]}' into the text field.",
+                "input_text": "__wrong__",
+                "skip_prompt": true,
+                "assert_locator_presence": true
+              },
+              "strict_replay": true,
+              "max_tries": 1,
+              "max_timeout_seconds_per_try": 3
+            },
+            "end_sleep_time": 0
+          },
+          "expected_error": "oracle:13adr_city"
+        }
+      ]
+    }
+  ]
+}

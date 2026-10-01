@@ -1,0 +1,49 @@
+{
+  "date": "2026-10-02",
+  "timezone": "Asia/Kolkata",
+  "workflow_name": "fill_roboform_test_form-4638754e",
+  "dashboard_updated_at": "2 Oct 2026, 02:13",
+  "verification": [
+    "Recorder connected: Logout and Start Capture visible",
+    "Active capture: debugging banner and Complete Capture visible",
+    "Live DOM values checked after browser input",
+    "Saved workflow row and full JSON inspected"
+  ],
+  "captured_values": {
+    "full_name": "myname",
+    "address_line_1": "xyz",
+    "address_line_2": "abc",
+    "city": "SF"
+  },
+  "displayed_capture_entries": 9,
+  "generated_node_count": 8,
+  "generated_action_order": [
+    "input full_name",
+    "click full_name",
+    "input address_line_1",
+    "click address_line_1",
+    "input address_line_2",
+    "click address_line_2",
+    "input city",
+    "input city"
+  ],
+  "generated_parameter_defaults": {
+    "full_name": [
+      "John Doe"
+    ],
+    "address_line_1": [
+      "123 Main St"
+    ],
+    "address_line_2": [
+      "Apt 5"
+    ],
+    "city": [
+      "San Francisco"
+    ]
+  },
+  "generated_recording_replayed": false,
+  "email_sent": false,
+  "notes": "User handled extension setup and Start/Complete Capture; assistant performed four form inputs and independently verified the saved workflow. Duplicate input and follow-up clicks are optimization candidates, not validated removable steps.",
+  "strict_copy_replayed": true,
+  "strict_copy_note": "The experiment uses a strict local copy, preserving recorded command order and parameter references, with independent four-field assertions. Hosted recording is unchanged."
+}

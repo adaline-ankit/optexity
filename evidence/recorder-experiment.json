@@ -1,0 +1,172 @@
+{
+  "date": "2026-10-02",
+  "source_workflow": "fill_roboform_test_form-4638754e",
+  "scope": "Strict local copy of official Recorder workflow; trusted resettable form, two datasets, two repeats. Hidden effects and hosted execution are not covered.",
+  "source_sha256": "e5be3f8ea4cee0a3dc8ab1525a311d14b154bde4a750e09f58e487448b5db612",
+  "contract_sha256": "26bac5ce3743429a1e2a9e7aeb500fdc7c64ccaf459a474418af261ac00d1723",
+  "original_action_count": 8,
+  "optimized_action_count": 4,
+  "kept_original_indices": [
+    0,
+    2,
+    4,
+    7
+  ],
+  "removed_original_indices": [
+    1,
+    3,
+    5,
+    6
+  ],
+  "strong_trial_count": 77,
+  "phase_counts": {
+    "baseline": 4,
+    "audit-before-empty": 4,
+    "audit-before": 16,
+    "deletion": 29,
+    "final": 4,
+    "audit-after-empty": 4,
+    "audit-after": 16
+  },
+  "measured_llm_attempts_all_trials": 0,
+  "baseline": [
+    {
+      "case": "captured",
+      "task_id": "de81e682-13ea-4671-b6f9-4a8c8b49ef4f",
+      "status": "success",
+      "error": null,
+      "elapsed_seconds": 18.374,
+      "llm": {
+        "attempts": 0,
+        "prompt_tokens": 0,
+        "completion_tokens": 0
+      }
+    },
+    {
+      "case": "captured",
+      "task_id": "aea3ef18-5b1f-4f63-b9cd-a35731a08ba3",
+      "status": "success",
+      "error": null,
+      "elapsed_seconds": 17.72,
+      "llm": {
+        "attempts": 0,
+        "prompt_tokens": 0,
+        "completion_tokens": 0
+      }
+    },
+    {
+      "case": "different-data",
+      "task_id": "b75db1e0-e9cf-42b1-8b98-e025aa7b22cf",
+      "status": "success",
+      "error": null,
+      "elapsed_seconds": 22.747,
+      "llm": {
+        "attempts": 0,
+        "prompt_tokens": 0,
+        "completion_tokens": 0
+      }
+    },
+    {
+      "case": "different-data",
+      "task_id": "8114cfda-fa64-41e0-a310-cf0486e345c1",
+      "status": "success",
+      "error": null,
+      "elapsed_seconds": 18.09,
+      "llm": {
+        "attempts": 0,
+        "prompt_tokens": 0,
+        "completion_tokens": 0
+      }
+    }
+  ],
+  "final": [
+    {
+      "case": "captured",
+      "task_id": "838c9135-63dd-4d8c-970f-0a2f40c1fc5a",
+      "status": "success",
+      "error": null,
+      "elapsed_seconds": 9.387,
+      "llm": {
+        "attempts": 0,
+        "prompt_tokens": 0,
+        "completion_tokens": 0
+      }
+    },
+    {
+      "case": "captured",
+      "task_id": "7894f94e-1ebf-4bf0-8dba-ff5c98ee5ada",
+      "status": "success",
+      "error": null,
+      "elapsed_seconds": 9.424,
+      "llm": {
+        "attempts": 0,
+        "prompt_tokens": 0,
+        "completion_tokens": 0
+      }
+    },
+    {
+      "case": "different-data",
+      "task_id": "4e927362-5285-4c0b-94b6-a800b61b81fc",
+      "status": "success",
+      "error": null,
+      "elapsed_seconds": 9.976,
+      "llm": {
+        "attempts": 0,
+        "prompt_tokens": 0,
+        "completion_tokens": 0
+      }
+    },
+    {
+      "case": "different-data",
+      "task_id": "1fa9db47-48fa-41a7-9990-0c57d3489681",
+      "status": "success",
+      "error": null,
+      "elapsed_seconds": 9.605,
+      "llm": {
+        "attempts": 0,
+        "prompt_tokens": 0,
+        "completion_tokens": 0
+      }
+    }
+  ],
+  "weak_oracle": {
+    "promoted": false,
+    "trial_count": 5,
+    "error": "trial-004: corruption survived or failed at the wrong check",
+    "surviving_probe": "corrupt-city",
+    "surviving_probe_receipt": {
+      "status": "success",
+      "error": null,
+      "elapsed_seconds": 11.229,
+      "task_id": "c63b9665-04ac-45d7-af95-77537461e7ef",
+      "llm": {
+        "attempts": 0,
+        "prompt_tokens": 0,
+        "completion_tokens": 0
+      },
+      "timing_scope": "browser setup, execution, outcome assertions, final logging and cleanup"
+    }
+  },
+  "tests": {
+    "compiler_policy": 25,
+    "chromium": 5,
+    "experiment_policy": 15,
+    "recorder": 6,
+    "total": 51
+  },
+  "timing_limit": "Small sequential sample with non-random ordering and shared machine load; descriptive only. Timings include startup, execution, assertions, logging and cleanup. No additional token savings claimed relative to already model-free replay.",
+  "baseline_median_seconds": 18.232,
+  "final_median_seconds": 9.5145,
+  "standalone_optimized_replay": {
+    "status": "success",
+    "error": null,
+    "elapsed_seconds": 17.229,
+    "task_id": "42d3dc05-f735-457b-9f35-cfd9f9f8c604",
+    "llm": {
+      "attempts": 0,
+      "prompt_tokens": 0,
+      "completion_tokens": 0
+    },
+    "timing_scope": "browser setup, execution, outcome assertions, final logging and cleanup"
+  }
+}

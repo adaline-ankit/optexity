@@ -11,6 +11,7 @@ from pathlib import Path
 from patchright.async_api import Error, async_playwright
 
 from scripts.compile_cached_automation import _command_from_target
+from scripts.prepare_recording_demo import prepare
 
 
 class BrowserReplayTests(unittest.IsolatedAsyncioTestCase):
@@ -65,3 +66,57 @@ class BrowserReplayTests(unittest.IsolatedAsyncioTestCase):
             await namespace["code_fn"](self.page)
         await self.page.locator('[name="13adr_city"]').fill("SF")
         await namespace["code_fn"](self.page)
+
+    async def test_recording_oracle_rejects_each_corrupted_field(self):
+        source = json.loads(
+            (
+                Path(__file__).resolve().parents[1] / "evidence/recorder-source.json"
+            ).read_text()
+        )
+        _, contract = prepare(source)
+        expected = {
+            "04fullname": "myname",
+            "10address1": "xyz",
+            "11address2": "abc",
+            "13adr_city": "SF",
+        }
+        await self.page.set_content(
+            "".join(f'<input name="{k}" value="{v}">' for k, v in expected.items())
+        )
+        namespace = {}
+        exec(
+            contract["cases"][0]["oracle"]["python_script_action"]["execution_code"],
+            {},
+            namespace,
+        )
+        oracle = namespace["code_fn"]
+        await oracle(self.page)
+        for name, correct in expected.items():
+            with self.subTest(field=name):
+                await self.page.locator(f'[name="{name}"]').fill("__wrong__")
+                with self.assertRaisesRegex(AssertionError, "oracle:" + name):
+                    await oracle(self.page)
+                await self.page.locator(f'[name="{name}"]').fill(correct)
+        await oracle(self.page)
+
+    async def test_weak_oracle_accepts_wrong_city_despite_other_checks(self):
+        source = json.loads(
+            (
+                Path(__file__).resolve().parents[1] / "evidence/recorder-source.json"
+            ).read_text()
+        )
+        _, contract = prepare(source)
+        code = contract["cases"][0]["oracle"]["python_script_action"]["execution_code"]
+        code = code.replace(
+            "    for name, value in expected.items():",
+            "    del expected['13adr_city']\n    for name, value in expected.items():",
+        )
+        await self.page.set_content(
+            '<input name="04fullname" value="myname"><input name="10address1" value="xyz"><input name="11address2" value="abc"><input name="13adr_city" value="WRONG">'
+        )
+        namespace = {}
+        exec(code, {}, namespace)
+        await namespace["code_fn"](self.page)
+        self.assertEqual(
+            await self.page.locator('[name="13adr_city"]').input_value(), "WRONG"
+        )

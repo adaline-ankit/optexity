@@ -10,7 +10,7 @@ Run browser-use once, record actual tool execution evidence, compile a narrow na
 - Compilation replaces one top-level agentic node and preserves surrounding nodes, including outcome checks.
 - Each trace row must contain one matching action with supported parameters. Unknown semantics are rejected, not silently discarded; for example, an input containing `press_enter` cannot be compiled by this prototype.
 - `strict_replay` prevents both normal prompt fallback and the outer LLM error classifier.
-- Literal LLM-assisted compilation and iterative optimization bonuses are not implemented.
+- A bounded deletion/replay loop minimizes resettable form workflows after adversarial outcome checks pass. It reuses the local engine; see `REPLAY_EXPERIMENTS.md`. LLM-assisted compilation and general adaptive repair remain unimplemented.
 
 ## Run locally
 
@@ -57,7 +57,7 @@ Use a real Optexity API credential, distinct from a model-provider credential. T
 OPTEXITY_LOCAL_AUTOMATION="$PWD/test_automation_cached.json" ../.venv/bin/optexity inference --host 127.0.0.1 --port 9000 --child_process_id 0
 ```
 
-Allocate the existing personal workflow using `POST /inference`; this runs through the actual control plane and uploads task evidence. The audit verified task `bd6f2759-71ce-492d-a187-6728f510b1d3` as **Local / success** in the dashboard. A JSON-authored workflow is not an extension recording. Analytics with Both environments shows one successful task, 100% success, and 24-second median. Local-only filter showed zero; cause unconfirmed. Chrome-extension recording remains unverified because Chrome access was unavailable in this session. See `evidence/platform-status.json`.
+Allocate the existing personal workflow using `POST /inference`; this runs through the actual control plane and uploads task evidence. The audit verified task `bd6f2759-71ce-492d-a187-6728f510b1d3` as **Local / success** in the dashboard. A JSON-authored workflow is not an extension recording. Analytics with Both environments shows one successful task, 100% success, and 24-second median. Local-only filter showed zero; cause unconfirmed. See `evidence/platform-status.json` for that historical audit. On 2 October, official Recorder onboarding was completed and the saved eight-node workflow `fill_roboform_test_form-4638754e` was inspected in Workflows and its JSON editor. Its recorded JSON is `evidence/recorder-source.json`.
 
 The hosted schema currently strips the new `strict_replay` field when saving JSON. Use the local fork with the override or the local runner for strict-policy evidence until the server schema is updated.
 
@@ -79,10 +79,11 @@ Traces and receipts are in `evidence/`. Each generated JSON has a `.provenance.j
 ```bash
 ../.venv/bin/python -m unittest discover -s tests -p test_cached_automation.py -v
 ../.venv/bin/python -m unittest discover -s tests -p test_replay_browser.py -v
+../.venv/bin/python -m unittest discover -s tests -p test_replay_experiment.py -v
 ../.venv/bin/python -m unittest discover -s ../browser-use/tests/takehome -v
 ```
 
-25 compiler/policy tests, 3 real-Chromium selector/oracle tests, and 6 recorder tests passed in the final submission review on 2 October 2026 (34 total). Added checks cover unsupported input parameters, multiple actions in one row, boolean click counts, preservation of click options, invalid waits, and unchanged metadata when tracing is disabled. Live RoboForm learning/replay, Books capture/replay, broken-selector failure, and actual platform task previously passed their stated checks. The review regenerated both cached recipes and confirmed unchanged JSON output. Repository-pinned Black/isort and Ruff checks, Python compilation, schema validation and `git diff --check` passed for the relevant change surfaces. These are focused checks, not a claim that the entire upstream test suites were run. The GitHub Sourcery check is automated review, not test CI.
+25 compiler/policy tests, 5 real-Chromium selector/oracle tests, 15 experiment-policy tests, and 6 recorder tests passed on 2 October 2026 (51 total). Experiment checks cover weak oracles, infrastructure failures, missing/model-call metrics, budget exhaustion, repeated outcomes, wrong assertion identity, immutable contracts, and final verification failures. Added checks cover unsupported input parameters, multiple actions in one row, boolean click counts, preservation of click options, invalid waits, and unchanged metadata when tracing is disabled. Live RoboForm learning/replay, Books capture/replay, broken-selector failure, and actual platform task previously passed their stated checks. The review regenerated both cached recipes and confirmed unchanged JSON output. Repository-pinned Black/isort and Ruff checks, Python compilation, schema validation and `git diff --check` passed for the relevant change surfaces. These are focused checks, not a claim that the entire upstream test suites were run. The GitHub Sourcery check is automated review, not test CI.
 
 ## Reviewer reading order
 
@@ -102,6 +103,6 @@ The implementation adds no production dependencies or parallel replay engine. Sm
 - Redaction applies to this JSONL format only; upstream logs/screenshots/conversations have separate policies. Missing/sensitive targets are blocked from plaintext replay.
 - ContextVars isolate configuration, not shared files or browser ownership. Use unique per-run directories. Mixed run IDs are rejected.
 - Trusted automation files can contain Python/locator expressions executed by the existing engine. The compiler emits quoted fixed templates; the engine is not a sandbox for arbitrary files.
-- No semantic action pruning is claimed. Real actions and waits are retained because a single trace cannot prove their side effects irrelevant.
+- The trace compiler still preserves actions and waits. The separate experiment tool tests single-action deletions against declared outcomes for resettable forms. It does not prove hidden side-effect equivalence or support unrestricted production optimization.
 - Ordering checks do not establish trace completeness: an ordered trace with a missing action can still compile. The task hash binds objective text, not website origin, and compilation does not require a baseline oracle-success receipt. Current manual promotion must inspect baseline and replay results; automatic promotion needs a finalized manifest, environment binding, and oracle receipt.
 - Compiler click-option tests validate translation of supplied trace parameters. The current browser-use recorder emits the supported click index only; end-to-end right-click/double-click capture is not claimed.
