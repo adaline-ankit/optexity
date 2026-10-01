@@ -56,7 +56,7 @@ Use a real Optexity API credential, distinct from a model-provider credential. T
 OPTEXITY_LOCAL_AUTOMATION="$PWD/test_automation_cached.json" ../.venv/bin/optexity inference --host 127.0.0.1 --port 9000 --child_process_id 0
 ```
 
-Allocate the existing personal workflow using `POST /inference`; this runs through the actual control plane and uploads task evidence. The audit verified task `bd6f2759-71ce-492d-a187-6728f510b1d3` as **Local / success** in the dashboard. A JSON-authored workflow is not an extension recording. Analytics initially continued to show zero local tasks; see `evidence/platform-status.json` for the precise remaining setup state.
+Allocate the existing personal workflow using `POST /inference`; this runs through the actual control plane and uploads task evidence. The audit verified task `bd6f2759-71ce-492d-a187-6728f510b1d3` as **Local / success** in the dashboard. A JSON-authored workflow is not an extension recording. Analytics with Both environments shows one successful task, 100% success, and 24-second median. Local-only filter showed zero; cause unconfirmed. Chrome-extension recording remains unverified because Chrome access was unavailable in this session. See `evidence/platform-status.json`.
 
 The hosted schema currently strips the new `strict_replay` field when saving JSON. Use the local fork with the override or the local runner for strict-policy evidence until the server schema is updated.
 
