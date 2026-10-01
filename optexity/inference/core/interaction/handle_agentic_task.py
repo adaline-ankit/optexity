@@ -1,4 +1,5 @@
 import logging
+
 from browser_use import Agent, BrowserSession, Tools
 from browser_use.agent.optexity_step_cache import trace_actions_to
 
@@ -67,16 +68,17 @@ async def handle_agentic_task(
             save_conversation_path=step_directory,
         )
         logger.debug(f"Starting browser session for agentic task {browser.cdp_url} ")
-        await agent.browser_session.start()
-        logger.debug(f"Finally running agentic task on browser_use {browser.cdp_url} ")
-        with trace_actions_to(step_directory / "step_cache"):
-            history = await agent.run(max_steps=agentic_task_action.max_steps)
-        logger.debug(f"Agentic task completed on browser_use {browser.cdp_url} ")
-
-        agent.stop()
-        if agent.browser_session:
-            await agent.browser_session.stop()
-            await agent.browser_session.reset()
+        try:
+            await agent.browser_session.start()
+            with trace_actions_to(step_directory / "step_cache"):
+                history = await agent.run(max_steps=agentic_task_action.max_steps)
+            if history.is_successful() is not True:
+                raise RuntimeError("Agent did not confirm successful completion")
+        finally:
+            agent.stop()
+            if agent.browser_session:
+                await agent.browser_session.stop()
+                await agent.browser_session.reset()
 
         return history
 

@@ -5,6 +5,7 @@ import logging
 import os
 import time
 import uuid
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -20,7 +21,9 @@ def _load_automation(path: Path) -> Automation:
         return Automation.model_validate(json.load(f))
 
 
-def _build_task(automation: Automation, save_directory: Path, model: str | None) -> Task:
+def _build_task(
+    automation: Automation, save_directory: Path, model: str | None
+) -> Task:
     now = datetime.now(timezone.utc)
     task = Task(
         task_id=str(uuid.uuid4()),
@@ -68,6 +71,45 @@ def _patch_offline_server_calls() -> None:
         setattr(run_automation_module, name, _noop)
 
 
+@contextmanager
+def measure_llm_calls(forbid: bool):
+    """Measure the engine's LiteLLM boundary, including failed attempts.
+
+    This is a local harness, not a network firewall. Both current Optexity model
+    adapters route calls here. New SDK integrations need their own guard.
+    """
+    import litellm
+    from unittest.mock import patch
+
+    metrics = {"attempts": 0, "prompt_tokens": 0, "completion_tokens": 0}
+    original_sync, original_async = litellm.completion, litellm.acompletion
+
+    def begin():
+        metrics["attempts"] += 1
+        if forbid:
+            raise RuntimeError("LLM call forbidden during deterministic replay")
+
+    def finish(response):
+        usage = getattr(response, "usage", None)
+        metrics["prompt_tokens"] += getattr(usage, "prompt_tokens", 0) or 0
+        metrics["completion_tokens"] += getattr(usage, "completion_tokens", 0) or 0
+        return response
+
+    def sync(*args, **kwargs):
+        begin()
+        return finish(original_sync(*args, **kwargs))
+
+    async def asynchronous(*args, **kwargs):
+        begin()
+        return finish(await original_async(*args, **kwargs))
+
+    with (
+        patch.object(litellm, "completion", sync),
+        patch.object(litellm, "acompletion", asynchronous),
+    ):
+        yield metrics
+
+
 async def _run(args: argparse.Namespace) -> int:
     logging.basicConfig(
         level=logging.INFO,
@@ -79,13 +121,17 @@ async def _run(args: argparse.Namespace) -> int:
     child_process_id = args.child_process_id
     unique_child_arn = f"local-{child_process_id}"
 
-    from optexity.inference.child_process import restart_global_actual_browser, setup_browser
+    from optexity.inference.child_process import (
+        restart_global_actual_browser,
+        setup_browser,
+    )
     from optexity.inference.core.run_automation import run_automation
 
     if args.offline:
         _patch_offline_server_calls()
 
     start = time.perf_counter()
+    llm_metrics = {}
     try:
         await setup_browser(task, unique_child_arn, child_process_id)
         from optexity.inference import child_process
@@ -96,30 +142,35 @@ async def _run(args: argparse.Namespace) -> int:
         if cdp_url is None:
             raise RuntimeError("Actual browser did not expose CDP URL")
 
-        await run_automation(
-            task=task,
-            unique_child_arn=unique_child_arn,
-            child_process_id=child_process_id,
-            cdp_url=cdp_url,
-            max_tries=1,
-        )
+        with measure_llm_calls(args.forbid_llm) as llm_metrics:
+            await run_automation(
+                task=task,
+                unique_child_arn=unique_child_arn,
+                child_process_id=child_process_id,
+                cdp_url=cdp_url,
+                max_tries=1,
+            )
     finally:
         await restart_global_actual_browser("local runner cleanup")
 
     elapsed = time.perf_counter() - start
-    print(
-        json.dumps(
-            {
-                "status": task.status,
-                "error": task.error,
-                "elapsed_seconds": round(elapsed, 3),
-                "task_id": task.task_id,
-                "task_directory": str(task.task_directory),
-                "log_file": str(task.log_file_path),
-            },
-            indent=2,
-        )
+    result = {
+        "status": task.status,
+        "error": task.error,
+        "elapsed_seconds": round(elapsed, 3),
+        "task_id": task.task_id,
+        "task_directory": str(task.task_directory),
+        "log_file": str(task.log_file_path),
+        "llm": llm_metrics,
+        "timing_scope": "browser setup, execution, outcome assertions, final logging and cleanup",
+    }
+    if args.forbid_llm and llm_metrics.get("attempts"):
+        task.status = result["status"] = "failed"
+        result["error"] = "Replay attempted an LLM call"
+    (task.task_directory / "run_result.json").write_text(
+        json.dumps(result, indent=2) + "\n"
     )
+    print(json.dumps(result, indent=2))
     return 0 if task.status == "success" else 1
 
 
@@ -129,7 +180,10 @@ def main() -> None:
     parser.add_argument("--output-dir", type=Path, default=Path("/tmp/optexity-local"))
     parser.add_argument("--model", default=None)
     parser.add_argument("--child-process-id", type=int, default=0)
-    parser.add_argument("--offline", action=argparse.BooleanOptionalAction, default=True)
+    parser.add_argument("--forbid-llm", action="store_true")
+    parser.add_argument(
+        "--offline", action=argparse.BooleanOptionalAction, default=True
+    )
     args = parser.parse_args()
     raise SystemExit(asyncio.run(_run(args)))
 

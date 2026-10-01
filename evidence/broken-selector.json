@@ -1,0 +1,14 @@
+{
+  "status": "failed",
+  "error": "Error in InputTextAction with assert_locator_presence: InputTextAction",
+  "elapsed_seconds": 21.529,
+  "task_id": "3a87bf72-527d-43b7-949d-fd4bd210baf3",
+  "task_directory": "/tmp/optexity-audit-negative/3a87bf72-527d-43b7-949d-fd4bd210baf3",
+  "log_file": "/tmp/optexity-audit-negative/3a87bf72-527d-43b7-949d-fd4bd210baf3/logs/optexity.log",
+  "llm": {
+    "attempts": 0,
+    "prompt_tokens": 0,
+    "completion_tokens": 0
+  },
+  "timing_scope": "browser setup, execution, outcome assertions, final logging and cleanup"
+}

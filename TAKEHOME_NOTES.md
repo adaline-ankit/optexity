@@ -1,126 +1,94 @@
-# Optexity take-home notes
+# Deterministic action-cache take-home
 
-## What changed
+Run browser-use once, record actual tool execution evidence, compile a narrow native Optexity recipe, then replay with explicit outcome assertions and no model fallback.
 
-This solution turns one successful `browser-use` agent run into a deterministic Optexity automation.
+## Scope
 
-Flow:
+- Input/click tools attach their resolved DOM target after successful event dispatch. The recorder writes task-local schema-v2 JSONL.
+- Compiler checks schema, objective hash, run identity, action order, completion, errors, execution evidence, redaction, and target scope.
+- Input/click become command-only native nodes. Waits remain native sleeps; terminal `done` is removed. Other actions are rejected.
+- Compilation replaces one top-level agentic node and preserves surrounding nodes, including outcome checks.
+- `strict_replay` prevents both normal prompt fallback and the outer LLM error classifier.
+- Literal LLM-assisted compilation and iterative optimization bonuses are not implemented.
 
-1. Run the normal `agentic_task` once.
-2. Record each action that actually executed in `browser-use`.
-3. Store the resolved target element facts beside the Optexity task logs.
-4. Compile supported actions into deterministic Optexity nodes with strict locators.
-5. Replay cached automation without an LLM call.
+## Run locally
 
-The cache is opt-in. Optexity enables it through a task-local trace context around `agent.run(...)`, so concurrent runs do not share a process-global trace path. The recorder still keeps the environment-variable fallback for manual debugging.
-
-## Files
-
-Companion `browser-use` fork:
-
-- `browser_use/agent/service.py` records each executed tool action after it completes.
-- `browser_use/agent/optexity_step_cache.py` writes `browser_use_trace.jsonl` into the configured trace directory.
-
-This repo:
-
-- `optexity/inference/core/interaction/handle_agentic_task.py` sets the trace directory for each agentic task step.
-- `scripts/run_local_automation.py` runs an automation JSON locally without server uploads by default.
-- `scripts/compile_cached_automation.py` converts a trace JSONL file into deterministic Optexity automation nodes.
-- `test_automation.json` is the baseline agentic RoboForm task.
-- `test_automation_cached.json` is the generated deterministic replay for RoboForm.
-- `test_automation_books_cached.json` is a second deterministic multi-page example.
-
-## Why record executed actions, not model plans
-
-A model plan is intent. It can include actions that never run because the agent stops early after an error, navigation, or `done` action.
-
-The cache should represent browser truth: action name, action params, target index, resolved target element, result, and elapsed time. That makes replay based on what actually worked.
-
-## Locator strategy
-
-The compiler prefers stable element facts in this order:
-
-1. `id`
-2. `data-testid`
-3. `name`
-4. `aria-label`
-5. `placeholder`
-6. XPath fallback
-
-Generated locator commands use XPath predicates with quoted literals for recorded attributes. That avoids CSS selector bugs when an id, name, or test id contains `.`, `#`, `[`, `]`, quotes, or spaces.
-
-For replay, generated nodes use `skip_prompt: true` and `assert_locator_presence: true`. If the cached locator breaks, replay fails loudly instead of silently falling back to an LLM and hiding the cache failure.
-
-## Local commands
-
-Install both forks in one virtualenv, with `browser-use` first so Optexity imports the local companion package:
+Install the personal forks in the brief's order, in one Python 3.11+ virtualenv. Use the compatible Optexity branch of browser-use (distribution `optexity-browser-use`):
 
 ```bash
-cd /Users/ankit/Desktop/Adaline/optexity-takehome
 python3.11 -m venv .venv
-.venv/bin/pip install -e browser-use
 .venv/bin/pip install -e optexity
+.venv/bin/pip install -e browser-use
+.venv/bin/python -c 'import optexity, browser_use; print(optexity.__file__); print(browser_use.__file__)'
+cd optexity
 ```
 
-Run baseline agentic automation with a cheap model:
+With `OPENAI_API_KEY` already in the environment, run the agentic baseline:
 
 ```bash
-cd /Users/ankit/Desktop/Adaline/optexity-takehome/optexity
-OPENAI_API_KEY="$OPENAI_API_KEY" ../.venv/bin/python scripts/run_local_automation.py \
-  test_automation.json \
-  --output-dir /tmp/optexity-local-baseline \
-  --model openai/gpt-4.1-mini
+../.venv/bin/python scripts/run_local_automation.py test_automation.json --model openai/gpt-4.1-mini
 ```
 
-Compile the trace into cached automation:
+Compile and replay committed synthetic evidence without an API key:
 
 ```bash
-../.venv/bin/python scripts/compile_cached_automation.py \
-  --baseline test_automation.json \
-  --trace /tmp/optexity-local-baseline/<task_id>/logs/step_0/step_cache/browser_use_trace.jsonl \
-  --out test_automation_cached.json
+../.venv/bin/python scripts/compile_cached_automation.py --baseline test_automation.json --trace evidence/roboform.trace.jsonl --out test_automation_cached.json
+env -u OPENAI_API_KEY ../.venv/bin/python scripts/run_local_automation.py test_automation_cached.json --forbid-llm
+../.venv/bin/python scripts/compile_cached_automation.py --baseline test_automation_books.json --trace evidence/books.trace.jsonl --out test_automation_books_cached.json
+env -u OPENAI_API_KEY ../.venv/bin/python scripts/run_local_automation.py test_automation_books_cached.json --forbid-llm
 ```
 
-Replay cached automation without an LLM call:
+`--offline` defaults true and skips Optexity uploads/callbacks; website access and baseline model calls remain enabled. Each local run writes `run_result.json` with timing, outcome and LiteLLM boundary counters. `--forbid-llm` blocks and counts a model attempt even if a downstream caller catches the error.
+
+Books capture can be reproduced without model spend:
 
 ```bash
-../.venv/bin/python scripts/run_local_automation.py \
-  test_automation_cached.json \
-  --output-dir /tmp/optexity-local-cached
+../.venv/bin/python -m scripts.record_books_demo
 ```
 
-## Evidence from local runs
+This driver selects indices from the **live DOM**, executes actual browser-use clicks, verifies category/product pages, and records the same tool evidence. It tests capture/compile/replay, not autonomous Books planning. `test_automation_books.json` is available for an additional paid agent-learning run; no such run is claimed in the committed evidence.
 
-RoboForm baseline agentic run:
+## Actual platform worker
 
-- status: `success`
-- model: `openai/gpt-4.1-mini`
-- elapsed: `23.353s` on the fresh hardened run
-- trace rows: 5 actions, including 4 form inputs plus `done`; no redacted fields for this non-sensitive task
+Use a real Optexity API credential, distinct from a model-provider credential. The brief's local-JSON override is opt-in:
 
-RoboForm cached replay:
+```bash
+OPTEXITY_LOCAL_AUTOMATION="$PWD/test_automation_cached.json" ../.venv/bin/optexity inference --host 127.0.0.1 --port 9000 --child_process_id 0
+```
 
-- status: `success`
-- elapsed: `9.316s` on the fresh trace-derived replay after hardening
-- no LLM needed for replay
+Allocate the existing personal workflow using `POST /inference`; this runs through the actual control plane and uploads task evidence. The audit verified task `bd6f2759-71ce-492d-a187-6728f510b1d3` as **Local / success** in the dashboard. A JSON-authored workflow is not an extension recording. Analytics initially continued to show zero local tasks; see `evidence/platform-status.json` for the precise remaining setup state.
 
-Books cached replay:
+The hosted schema currently strips the new `strict_replay` field when saving JSON. Use the local fork with the override or the local runner for strict-policy evidence until the server schema is updated.
 
-- status: `success`
-- elapsed: `8.002s`
-- exercised click + navigation + assertion
+## Evidence
 
-Validation run:
+| Run | Outcome | Elapsed | LiteLLM boundary attempts | Prompt/completion tokens |
+|---|---|---:|---:|---:|
+| RoboForm learning | Four values asserted | 20.826 s | 3 | 22,936 / 765 |
+| RoboForm replay | Same assertions | 18.440 s | 0 | 0 / 0 |
+| Books replay | URL/title/product section asserted | 8.474 s | 0 | 0 / 0 |
+| Broken selector | Expected failure | 21.529 s | 0 | 0 / 0 |
 
-- `compileall` passed for changed Python files in both repos.
-- automation JSON schema validation passed for all three test automation files.
-- `git diff --check` passed in both repos.
-- secret scan found no real OpenAI key in either repo.
-- synthetic trace test verified task-local trace nesting and sensitive input redaction.
-- synthetic compiler test verified special-character locator generation and secret-block failure.
+One observed RoboForm pair: 11.46% lower elapsed time. Timings include browser setup, assertions, logging, and cleanup. This is not a statistical performance claim; persistent browser profiles, startup, network and ordering can affect it. Boundary usage is not a billing invoice. Books has no claimed LLM-baseline comparison.
 
-## Tradeoffs and next steps
+Traces and receipts are in `evidence/`. Each generated JSON has a `.provenance.json` containing input hashes and retain/drop decisions. Checksums aid reproduction; they are not signatures.
 
-This is intentionally a narrow cache, not a broad self-healing system. It supports actions that have enough browser facts to replay safely. Unsupported or ambiguous actions fail during compile or replay. Sensitive input fields are redacted in traces and blocked by the compiler unless they are converted to explicit secure-parameter placeholders.
+## Validation
 
-The next production step would be to persist traces by task/site signature, add cache invalidation rules, and add richer compilers for select, scroll, extraction, uploads, and assertions. I would keep strict replay as the default and make LLM fallback explicit, measured, and visible in logs.
+```bash
+../.venv/bin/python -m unittest discover -s tests -p test_cached_automation.py -v
+../.venv/bin/python -m unittest discover -s tests -p test_replay_browser.py -v
+../.venv/bin/python -m unittest discover -s ../browser-use/tests/takehome -v
+```
+
+20 compiler/policy tests, 3 real-Chromium selector/oracle tests, and 5 recorder tests passed. Live RoboForm learning/replay, Books capture/replay, broken-selector failure, and actual platform task also passed their stated checks. Targeted Ruff error checks, Python compilation, schema validation and `git diff --check` passed. These are focused checks, not a claim that the entire upstream test suites were run.
+
+## Important boundaries
+
+- Final assertions establish demo outcomes independently of model `done`. Existing `assert_locator_node` only stores a boolean; it does not by itself fail a task.
+- Stable attributes are heuristics; Playwright rejects ambiguity, but uniqueness alone does not prove semantic identity.
+- Frame/shadow targets, general nested workflow compilation, parameter generalization, secure-parameter substitution, automatic cache lookup/versioning and adaptive repair are outside current support.
+- Redaction applies to this JSONL format only; upstream logs/screenshots/conversations have separate policies. Missing/sensitive targets are blocked from plaintext replay.
+- ContextVars isolate configuration, not shared files or browser ownership. Use unique per-run directories. Mixed run IDs are rejected.
+- Trusted automation files can contain Python/locator expressions executed by the existing engine. The compiler emits quoted fixed templates; the engine is not a sandbox for arbitrary files.
+- No semantic action pruning is claimed. Real actions and waits are retained because a single trace cannot prove their side effects irrelevant.

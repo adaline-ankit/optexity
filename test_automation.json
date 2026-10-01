@@ -16,7 +16,15 @@
           "max_steps": 15,
           "backend": "browser_use"
         }
-      }
+      },
+      "end_sleep_time": 0
+    },
+    {
+      "type": "action_node",
+      "python_script_action": {
+        "execution_code": "async def code_fn(page):\n    from patchright.async_api import expect\n    expected = {'04fullname': 'myname', '10address1': 'xyz', '11address2': 'abc', '13adr_city': 'SF'}\n    for name, value in expected.items():\n        await expect(page.locator('input[name=\"' + name + '\"]')).to_have_value(value, timeout=5000)\n"
+      },
+      "end_sleep_time": 0
     }
   ]
 }

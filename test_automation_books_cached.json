@@ -1,41 +1,45 @@
 {
   "browser_channel": "chrome",
-  "backend": "browser-use",
   "url": "https://books.toscrape.com/",
   "parameters": {
     "input_parameters": {},
-    "secure_parameters": {},
     "generated_parameters": {}
   },
   "nodes": [
     {
       "type": "action_node",
       "interaction_action": {
+        "strict_replay": true,
+        "max_tries": 1,
+        "max_timeout_seconds_per_try": 5.0,
         "click_element": {
-          "command": "get_by_role(\"link\", name=\"Travel\")",
+          "command": "locator(\"xpath=//a[@href='catalogue/category/books/travel_2/index.html']\")",
           "skip_prompt": true,
           "assert_locator_presence": true
         }
       },
-      "end_sleep_time": 1
+      "end_sleep_time": 0.0
     },
     {
       "type": "action_node",
       "interaction_action": {
+        "strict_replay": true,
+        "max_tries": 1,
+        "max_timeout_seconds_per_try": 5.0,
         "click_element": {
-          "command": "locator(\"article.product_pod h3 a[title='It\\\\'s Only the Himalayas']\")",
+          "command": "locator('xpath=//a[@href=\\'../../../its-only-the-himalayas_981/index.html\\' and @title=\"It\\'s Only the Himalayas\"]')",
           "skip_prompt": true,
           "assert_locator_presence": true
         }
       },
-      "end_sleep_time": 1
+      "end_sleep_time": 0.0
     },
     {
-      "type": "assert_locator_node",
-      "locator": "get_by_role(\"heading\", name=\"It's Only the Himalayas\")",
-      "assertion": "to_be_visible",
-      "output_variable_name": "book_detail_visible",
-      "timeout": 5
+      "type": "action_node",
+      "python_script_action": {
+        "execution_code": "async def code_fn(page):\n    from patchright.async_api import expect\n    await expect(page).to_have_url('https://books.toscrape.com/catalogue/its-only-the-himalayas_981/index.html', timeout=5000)\n    await expect(page.locator('.product_main h1')).to_have_text(\"It's Only the Himalayas\", timeout=5000)\n    await expect(page.get_by_text('Product Information', exact=True)).to_be_visible(timeout=5000)\n"
+      },
+      "end_sleep_time": 0.0
     }
   ]
 }

@@ -1,0 +1,14 @@
+{
+  "status": "success",
+  "error": null,
+  "elapsed_seconds": 8.474,
+  "task_id": "a04de3f3-eecd-4f14-9048-a1f4d49632f9",
+  "task_directory": "/tmp/optexity-audit-books-replay/a04de3f3-eecd-4f14-9048-a1f4d49632f9",
+  "log_file": "/tmp/optexity-audit-books-replay/a04de3f3-eecd-4f14-9048-a1f4d49632f9/logs/optexity.log",
+  "llm": {
+    "attempts": 0,
+    "prompt_tokens": 0,
+    "completion_tokens": 0
+  },
+  "timing_scope": "browser setup, execution, outcome assertions, final logging and cleanup"
+}

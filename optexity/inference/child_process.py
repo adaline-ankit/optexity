@@ -588,6 +588,21 @@ async def task_processor():
                 if not fetch_success:
                     automation_error = "Task allocated without an automation"
 
+            # Local development override from the take-home brief. Never active
+            # without an explicit path; malformed files fail this task.
+            local_automation_path = os.environ.get("OPTEXITY_LOCAL_AUTOMATION")
+            if local_automation_path:
+                try:
+                    from optexity.schema.automation import Automation
+
+                    with open(local_automation_path) as local_file:
+                        task.automation = Automation.model_validate(json.load(local_file))
+                    fetch_success = True
+                    logger.info("Loaded local automation from %s", local_automation_path)
+                except (OSError, ValueError) as local_error:
+                    fetch_success = False
+                    automation_error = f"Invalid local automation: {local_error}"
+
             if not fetch_success:
                 logger.error(
                     f"{automation_error} (task {task.task_id}); "

@@ -1,0 +1,10 @@
+{
+  "status": "success",
+  "capture_mode": "scripted live-DOM selection; real browser-use tools",
+  "llm": {
+    "attempts": 0,
+    "prompt_tokens": 0,
+    "completion_tokens": 0
+  },
+  "trace_path": "/tmp/optexity-books-tool-capture/b4849224-11bd-44ca-96ca-5b7f513f1d34/logs/step_0/step_cache/browser_use_trace.jsonl"
+}
