@@ -1,10 +1,6 @@
-"""Prepare a strict experiment from the actual Recorder onboarding JSON.
+"""Build reproducible strict replay and outcome-check fixtures for form tests."""
 
-Run from the repository root. Original order, parameters, commands, and input
-semantics stay intact. Only explicit replay policy and sleep/retry limits change.
-Outcome checks and counterfactual probes are separately authored test fixtures.
-"""
-
+import argparse
 import copy
 import json
 from pathlib import Path
@@ -19,7 +15,7 @@ FIELDS = {
 }
 
 
-def prepare(source):
+def prepare(source: dict) -> tuple[dict, dict]:
     strict = copy.deepcopy(source)
     strict["browser_channel"] = "chrome"
     for node in strict["nodes"]:
@@ -33,7 +29,7 @@ def prepare(source):
     Automation.model_validate(strict)
     contract = {"resettable": True, "cases": []}
     for name, values in [
-        ("captured", ["myname", "xyz", "abc", "SF"]),
+        ("default-values", ["myname", "xyz", "abc", "SF"]),
         ("different-data", ["Ada Lovelace", "42 Test Road", "Unit 7", "New Delhi"]),
     ]:
         parameters = {key: [value] for key, value in zip(FIELDS, values)}
@@ -79,9 +75,14 @@ def prepare(source):
     return strict, contract
 
 
-def main():
-    root = Path(__file__).resolve().parents[1]
-    source = json.loads((root / "evidence/recorder-source.json").read_text())
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--output-dir", type=Path, required=True)
+    args = parser.parse_args()
+    args.output_dir.mkdir(parents=True, exist_ok=True)
+    source = json.loads(
+        (Path(__file__).parent / "fixtures/replay/recorded_form.json").read_text()
+    )
     strict, contract = prepare(source)
     weak = copy.deepcopy(contract)
     weak["cases"] = weak["cases"][:1]
@@ -94,11 +95,11 @@ def main():
     # First probe demonstrates this deliberately incomplete oracle quickly.
     case["probes"] = list(reversed(case["probes"]))
     for filename, data in [
-        ("recorder-strict.json", strict),
-        ("recorder-contract.json", contract),
-        ("recorder-weak-contract.json", weak),
+        ("strict_form.json", strict),
+        ("form_contract.json", contract),
+        ("weak_form_contract.json", weak),
     ]:
-        (root / "evidence" / filename).write_text(json.dumps(data, indent=2) + "\n")
+        (args.output_dir / filename).write_text(json.dumps(data, indent=2) + "\n")
 
 
 if __name__ == "__main__":

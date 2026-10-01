@@ -1,4 +1,4 @@
-"""Real Chromium checks for generated selectors and the submitted outcome oracle.
+"""Real Chromium checks for generated selectors and outcome assertions.
 Run separately: python -m unittest discover -s tests -p test_replay_browser.py -v
 No network or LLM calls: HTML lives in a fresh browser page.
 """
@@ -9,9 +9,9 @@ import unittest
 from pathlib import Path
 
 from patchright.async_api import Error, async_playwright
+from replay_fixtures import prepare
 
 from scripts.compile_cached_automation import _command_from_target
-from scripts.prepare_recording_demo import prepare
 
 
 class BrowserReplayTests(unittest.IsolatedAsyncioTestCase):
@@ -48,7 +48,7 @@ class BrowserReplayTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_form_oracle_detects_wrong_city(self):
         baseline = json.loads(
-            (Path(__file__).resolve().parents[1] / "test_automation.json").read_text()
+            (Path(__file__).parent / "fixtures/replay/form.json").read_text()
         )
         source = baseline["nodes"][-1]["python_script_action"]["execution_code"]
         expected = {
@@ -69,9 +69,7 @@ class BrowserReplayTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_recording_oracle_rejects_each_corrupted_field(self):
         source = json.loads(
-            (
-                Path(__file__).resolve().parents[1] / "evidence/recorder-source.json"
-            ).read_text()
+            (Path(__file__).parent / "fixtures/replay/recorded_form.json").read_text()
         )
         _, contract = prepare(source)
         expected = {
@@ -101,9 +99,7 @@ class BrowserReplayTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_weak_oracle_accepts_wrong_city_despite_other_checks(self):
         source = json.loads(
-            (
-                Path(__file__).resolve().parents[1] / "evidence/recorder-source.json"
-            ).read_text()
+            (Path(__file__).parent / "fixtures/replay/recorded_form.json").read_text()
         )
         _, contract = prepare(source)
         code = contract["cases"][0]["oracle"]["python_script_action"]["execution_code"]
