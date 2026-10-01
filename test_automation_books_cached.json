@@ -1,0 +1,41 @@
+{
+  "browser_channel": "chrome",
+  "backend": "browser-use",
+  "url": "https://books.toscrape.com/",
+  "parameters": {
+    "input_parameters": {},
+    "secure_parameters": {},
+    "generated_parameters": {}
+  },
+  "nodes": [
+    {
+      "type": "action_node",
+      "interaction_action": {
+        "click_element": {
+          "command": "get_by_role(\"link\", name=\"Travel\")",
+          "skip_prompt": true,
+          "assert_locator_presence": true
+        }
+      },
+      "end_sleep_time": 1
+    },
+    {
+      "type": "action_node",
+      "interaction_action": {
+        "click_element": {
+          "command": "locator(\"article.product_pod h3 a[title='It\\\\'s Only the Himalayas']\")",
+          "skip_prompt": true,
+          "assert_locator_presence": true
+        }
+      },
+      "end_sleep_time": 1
+    },
+    {
+      "type": "assert_locator_node",
+      "locator": "get_by_role(\"heading\", name=\"It's Only the Himalayas\")",
+      "assertion": "to_be_visible",
+      "output_variable_name": "book_detail_visible",
+      "timeout": 5
+    }
+  ]
+}
