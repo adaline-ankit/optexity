@@ -12,7 +12,7 @@ Flow:
 4. Compile supported actions into deterministic Optexity nodes with strict locators.
 5. Replay cached automation without an LLM call.
 
-The cache is opt-in. It is enabled only when Optexity sets `OPTEXITY_BROWSER_USE_TRACE_DIR` around `agent.run(...)`.
+The cache is opt-in. Optexity enables it through a task-local trace context around `agent.run(...)`, so concurrent runs do not share a process-global trace path. The recorder still keeps the environment-variable fallback for manual debugging.
 
 ## Files
 
@@ -46,6 +46,8 @@ The compiler prefers stable element facts in this order:
 4. `aria-label`
 5. `placeholder`
 6. XPath fallback
+
+Generated locator commands use XPath predicates with quoted literals for recorded attributes. That avoids CSS selector bugs when an id, name, or test id contains `.`, `#`, `[`, `]`, quotes, or spaces.
 
 For replay, generated nodes use `skip_prompt: true` and `assert_locator_presence: true`. If the cached locator breaks, replay fails loudly instead of silently falling back to an LLM and hiding the cache failure.
 
@@ -93,14 +95,13 @@ RoboForm baseline agentic run:
 
 - status: `success`
 - model: `openai/gpt-4.1-mini`
-- elapsed: `20.494s`
-- trace rows: 5 actions, including 4 form inputs plus `done`
+- elapsed: `23.353s` on the fresh hardened run
+- trace rows: 5 actions, including 4 form inputs plus `done`; no redacted fields for this non-sensitive task
 
 RoboForm cached replay:
 
 - status: `success`
-- elapsed: `10.232s` in the first trace-derived replay
-- latest validation replay: `10.805s`
+- elapsed: `9.316s` on the fresh trace-derived replay after hardening
 - no LLM needed for replay
 
 Books cached replay:
@@ -115,9 +116,11 @@ Validation run:
 - automation JSON schema validation passed for all three test automation files.
 - `git diff --check` passed in both repos.
 - secret scan found no real OpenAI key in either repo.
+- synthetic trace test verified task-local trace nesting and sensitive input redaction.
+- synthetic compiler test verified special-character locator generation and secret-block failure.
 
 ## Tradeoffs and next steps
 
-This is intentionally a narrow cache, not a broad self-healing system. It supports actions that have enough browser facts to replay safely. Unsupported or ambiguous actions fail during compile or replay.
+This is intentionally a narrow cache, not a broad self-healing system. It supports actions that have enough browser facts to replay safely. Unsupported or ambiguous actions fail during compile or replay. Sensitive input fields are redacted in traces and blocked by the compiler unless they are converted to explicit secure-parameter placeholders.
 
 The next production step would be to persist traces by task/site signature, add cache invalidation rules, and add richer compilers for select, scroll, extraction, uploads, and assertions. I would keep strict replay as the default and make LLM fallback explicit, measured, and visible in logs.

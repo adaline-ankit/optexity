@@ -1,7 +1,6 @@
 import logging
-import os
-
 from browser_use import Agent, BrowserSession, Tools
+from browser_use.agent.optexity_step_cache import trace_actions_to
 
 from optexity.inference.infra.browser import Browser
 from optexity.inference.models import normalize_model
@@ -70,15 +69,8 @@ async def handle_agentic_task(
         logger.debug(f"Starting browser session for agentic task {browser.cdp_url} ")
         await agent.browser_session.start()
         logger.debug(f"Finally running agentic task on browser_use {browser.cdp_url} ")
-        previous_trace_dir = os.environ.get("OPTEXITY_BROWSER_USE_TRACE_DIR")
-        os.environ["OPTEXITY_BROWSER_USE_TRACE_DIR"] = str(step_directory / "step_cache")
-        try:
+        with trace_actions_to(step_directory / "step_cache"):
             history = await agent.run(max_steps=agentic_task_action.max_steps)
-        finally:
-            if previous_trace_dir is None:
-                os.environ.pop("OPTEXITY_BROWSER_USE_TRACE_DIR", None)
-            else:
-                os.environ["OPTEXITY_BROWSER_USE_TRACE_DIR"] = previous_trace_dir
         logger.debug(f"Agentic task completed on browser_use {browser.cdp_url} ")
 
         agent.stop()
