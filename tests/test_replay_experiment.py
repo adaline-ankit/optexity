@@ -67,6 +67,66 @@ async def evaluate(automation, label):
 
 
 class ExperimentTests(unittest.IsolatedAsyncioTestCase):
+    async def test_runner_cleanup_terminates_detached_children(self):
+        import asyncio
+        import signal
+        import sys
+
+        import psutil
+
+        from scripts.replay_experiment import _stop_runner
+
+        child_code = "import time; time.sleep(60)"
+        parent_code = (
+            "import signal, subprocess, sys, time; "
+            "signal.signal(signal.SIGINT, signal.SIG_IGN); "
+            f"child = subprocess.Popen([sys.executable, '-c', {child_code!r}], start_new_session=True); "
+            "print(child.pid, flush=True); time.sleep(60)"
+        )
+        process = await asyncio.create_subprocess_exec(
+            sys.executable,
+            "-c",
+            parent_code,
+            stdout=asyncio.subprocess.PIPE,
+            start_new_session=True,
+        )
+        child = psutil.Process(int(await process.stdout.readline()))
+        try:
+            await _stop_runner(process, grace_seconds=0.02)
+            self.assertEqual(process.returncode, -signal.SIGKILL)
+            self.assertFalse(
+                child.is_running() and child.status() != psutil.STATUS_ZOMBIE
+            )
+        finally:
+            if process.returncode is None:
+                process.kill()
+                await process.wait()
+            if child.is_running():
+                child.kill()
+
+    async def test_malformed_contract_fails_before_evaluation(self):
+        for changes in (
+            {"cases": "invalid"},
+            {"cases": [None]},
+            {"cases": [{"name": []}]},
+        ):
+            automation, contract = fixture()
+            contract.update(changes)
+            with self.subTest(changes=changes), self.assertRaises(ValueError):
+                await run_experiment(automation, contract, evaluate)
+
+    async def test_cancellation_propagates_after_runner_cleanup(self):
+        import asyncio
+
+        automation, _ = fixture()
+        with tempfile.TemporaryDirectory() as tmp:
+            evaluator = LocalEvaluator(Path(tmp), child_process_id=83)
+            task = asyncio.create_task(evaluator(automation, "cancelled"))
+            await asyncio.sleep(0.02)
+            task.cancel()
+            with self.assertRaises(asyncio.CancelledError):
+                await task
+
     async def test_runner_deadline_aborts_without_a_success_receipt(self):
         automation, _ = fixture()
         with tempfile.TemporaryDirectory() as tmp:

@@ -1,7 +1,14 @@
 import logging
+from contextlib import nullcontext
 
 from browser_use import Agent, BrowserSession, Tools
-from browser_use.agent.optexity_step_cache import trace_actions_to
+
+try:
+    from browser_use.agent.optexity_step_cache import trace_actions_to
+except ModuleNotFoundError as exc:
+    if exc.name != "browser_use.agent.optexity_step_cache":
+        raise
+    trace_actions_to = None
 
 from optexity.inference.infra.browser import Browser
 from optexity.inference.models import normalize_model
@@ -68,9 +75,19 @@ async def handle_agentic_task(
             save_conversation_path=step_directory,
         )
         logger.debug(f"Starting browser session for agentic task {browser.cdp_url} ")
+        if trace_actions_to is None:
+            logger.warning(
+                "Installed browser-use has no action tracing; replay compilation "
+                "requires a version providing optexity_step_cache"
+            )
+        trace_context = (
+            trace_actions_to(step_directory / "step_cache")
+            if trace_actions_to is not None
+            else nullcontext()
+        )
         try:
             await agent.browser_session.start()
-            with trace_actions_to(step_directory / "step_cache"):
+            with trace_context:
                 history = await agent.run(max_steps=agentic_task_action.max_steps)
             if history.is_successful() is not True:
                 raise RuntimeError("Agent did not confirm successful completion")

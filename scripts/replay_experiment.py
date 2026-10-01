@@ -13,19 +13,50 @@ import json
 import os
 import signal
 import sys
+from collections.abc import Awaitable, Callable
+from contextlib import suppress
 from pathlib import Path
+from typing import Any, NoReturn
+
+import psutil
+from pydantic import BaseModel, ConfigDict, Field
 
 from optexity.schema.automation import Automation
 
 
+class CorruptionProbe(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1)
+    node: dict[str, Any]
+    expected_error: str = Field(min_length=1)
+
+
+class ReplayCase(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1)
+    input_parameters: dict[str, Any]
+    oracle: dict[str, Any]
+    probes: list[CorruptionProbe] = Field(min_length=1)
+
+
+class ReplayContract(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    resettable: bool = Field(strict=True)
+    cases: list[ReplayCase] = Field(min_length=1)
+
+
 class ExperimentError(RuntimeError):
-    def __init__(self, message, report=None):
+    def __init__(self, message: str, report: dict[str, Any] | None = None):
         super().__init__(message)
         self.report = report or {}
 
 
-def _validate(automation, contract):
-    if contract.get("resettable") is not True or not contract.get("cases"):
+def _validate(automation: dict[str, Any], contract: dict[str, Any]) -> None:
+    parsed_contract = ReplayContract.model_validate(contract)
+    if not parsed_contract.resettable:
         raise ValueError("A resettable workflow and nonempty cases are required")
     model = Automation.model_validate(automation)
     if not model.nodes:
@@ -36,18 +67,14 @@ def _validate(automation, contract):
             raise ValueError("Only flat strict input/click nodes may be minimized")
     names = set()
     for case in contract["cases"]:
-        if not case.get("name") or case["name"] in names:
+        if case["name"] in names:
             raise ValueError("Case names must be nonempty and unique")
         names.add(case["name"])
-        if not case.get("probes") or not case.get("oracle", {}).get(
-            "python_script_action"
-        ):
+        if not case["oracle"].get("python_script_action"):
             raise ValueError(
                 "Each case requires an independent oracle and corruption probes"
             )
         for probe in case["probes"]:
-            if not probe.get("name") or not probe.get("expected_error"):
-                raise ValueError("Each probe requires a name and exact oracle error")
             mutated = copy.deepcopy(automation)
             mutated["nodes"] = [probe["node"]]
             probe_model = Automation.model_validate(mutated)
@@ -66,7 +93,14 @@ def _validate(automation, contract):
         Automation.model_validate(trial)
 
 
-async def run_experiment(automation, contract, evaluate, *, repeats=2, max_runs=100):
+async def run_experiment(
+    automation: dict[str, Any],
+    contract: dict[str, Any],
+    evaluate: Callable[[dict[str, Any], str], Awaitable[dict[str, Any]]],
+    *,
+    repeats: int = 2,
+    max_runs: int = 100,
+) -> dict[str, Any]:
     """Greedy fixed-point deletion, gated on adversarial outcome checks.
 
     evaluate receives a fresh automation dictionary and a unique trial label.
@@ -95,7 +129,7 @@ async def run_experiment(automation, contract, evaluate, *, repeats=2, max_runs=
     }
     kept = list(range(len(automation["nodes"])))
 
-    def fail(message):
+    def fail(message: str) -> NoReturn:
         raise ExperimentError(message, report)
 
     def assemble(indices, case, probe=None):
@@ -173,8 +207,7 @@ async def run_experiment(automation, contract, evaluate, *, repeats=2, max_runs=
     if not await passes(kept, "final"):
         fail("Final replay did not reproduce")
     await audit(kept, "audit-after")
-    # Keep the first verified dataset AND its unchanged oracle in the artifact.
-    # Other datasets remain reproducible through the committed contract.
+    # Preserve the oracle with the first verified dataset in the runnable artifact.
     optimized = assemble(kept, contract["cases"][0])
     report.update(
         promoted=True,
@@ -185,15 +218,42 @@ async def run_experiment(automation, contract, evaluate, *, repeats=2, max_runs=
     return report
 
 
-class LocalEvaluator:
-    """Process isolation; never change the caller's browser or server worker."""
+async def _stop_runner(
+    process: asyncio.subprocess.Process, grace_seconds: float = 15
+) -> None:
+    # Chrome starts its own process group; killing only the runner group leaks it.
+    children = []
+    with suppress(psutil.NoSuchProcess):
+        children = psutil.Process(process.pid).children(recursive=True)
+    try:
+        if process.returncode is None:
+            with suppress(ProcessLookupError):
+                process.send_signal(signal.SIGINT)
+        try:
+            await asyncio.wait_for(process.wait(), timeout=grace_seconds)
+        except TimeoutError:
+            with suppress(ProcessLookupError):
+                os.killpg(process.pid, signal.SIGKILL)
+    finally:
+        for child in children:
+            with suppress(psutil.NoSuchProcess):
+                child.kill()
+        await process.wait()
+        if children:
+            await asyncio.to_thread(psutil.wait_procs, children, timeout=5)
 
-    def __init__(self, directory, timeout=120, child_process_id=81):
+
+class LocalEvaluator:
+    """Run each trial in a separate process using an unused worker ID."""
+
+    def __init__(
+        self, directory: Path, timeout: float = 120, child_process_id: int = 81
+    ):
         self.directory = directory
         self.timeout = timeout
         self.child_process_id = child_process_id
 
-    async def __call__(self, automation, label):
+    async def __call__(self, automation: dict[str, Any], label: str) -> dict[str, Any]:
         directory = self.directory / label
         directory.mkdir()
         source = directory / "automation.json"
@@ -219,17 +279,11 @@ class LocalEvaluator:
             )
             try:
                 await asyncio.wait_for(process.wait(), timeout=self.timeout)
-            except (TimeoutError, asyncio.CancelledError):
-                # SIGINT lets asyncio.run cancel _run and execute its browser
-                # cleanup finally block. Escalation is bounded, never global.
-                if process.returncode is None:
-                    process.send_signal(signal.SIGINT)
-                try:
-                    await asyncio.wait_for(process.wait(), timeout=15)
-                except TimeoutError:
-                    os.killpg(process.pid, signal.SIGKILL)
-                    await process.wait()
-                raise ExperimentError(f"{label}: runner timed out or cancelled")
+            except (TimeoutError, asyncio.CancelledError) as exc:
+                await _stop_runner(process)
+                if isinstance(exc, asyncio.CancelledError):
+                    raise
+                raise ExperimentError(f"{label}: runner timed out") from exc
         receipts = list((directory / "run").glob("*/run_result.json"))
         if len(receipts) != 1 or process.returncode not in (0, 1):
             raise ExperimentError(f"{label}: runner did not produce one valid receipt")
@@ -243,7 +297,7 @@ class LocalEvaluator:
         return result
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("automation", type=Path)
     parser.add_argument("contract", type=Path)
@@ -264,7 +318,7 @@ def main():
                 max_runs=args.max_runs,
             )
         )
-    except (ExperimentError, ValueError) as exc:
+    except (ExperimentError, ValueError, OSError) as exc:
         report = getattr(exc, "report", {}) | {"promoted": False, "error": str(exc)}
     (args.output_dir / "report.json").write_text(json.dumps(report, indent=2) + "\n")
     if report["promoted"]:

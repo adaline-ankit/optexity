@@ -12,10 +12,6 @@ _SENSITIVE_MARKER = "<redacted:sensitive_input>"
 _SAFE_TAG = re.compile(r"^[A-Za-z][A-Za-z0-9_-]*$")
 
 
-def _q(value: str) -> str:
-    return repr(value)
-
-
 def _xpath_literal(value: str) -> str:
     if "'" not in value:
         return f"'{value}'"
@@ -49,24 +45,24 @@ def _command_from_target(target: dict[str, Any]) -> str:
     tag = _tag_name(target.get("tag_name"))
 
     if element_id := _attr(attrs, "id"):
-        return f"locator({_q('xpath=' + _xpath_for_attr(tag, 'id', element_id))})"
+        return f"locator({repr('xpath=' + _xpath_for_attr(tag, 'id', element_id))})"
     if test_id := _attr(attrs, "data-testid"):
-        return f"locator({_q('xpath=' + _xpath_for_attr(tag, 'data-testid', test_id))})"
-    if name := _attr(attrs, "name"):
-        return f"locator({_q('xpath=' + _xpath_for_attr(tag, 'name', name))})"
-    if aria_label := _attr(attrs, "aria-label"):
         return (
-            f"locator({_q('xpath=' + _xpath_for_attr(tag, 'aria-label', aria_label))})"
+            f"locator({repr('xpath=' + _xpath_for_attr(tag, 'data-testid', test_id))})"
         )
+    if name := _attr(attrs, "name"):
+        return f"locator({repr('xpath=' + _xpath_for_attr(tag, 'name', name))})"
+    if aria_label := _attr(attrs, "aria-label"):
+        return f"locator({repr('xpath=' + _xpath_for_attr(tag, 'aria-label', aria_label))})"
     if placeholder := _attr(attrs, "placeholder"):
-        return f"locator({_q('xpath=' + _xpath_for_attr(tag, 'placeholder', placeholder))})"
+        return f"locator({repr('xpath=' + _xpath_for_attr(tag, 'placeholder', placeholder))})"
     if href := _attr(attrs, "href"):
         predicate = f"@href={_xpath_literal(href)}"
         if title := _attr(attrs, "title"):
             predicate += f" and @title={_xpath_literal(title)}"
-        return f"locator({_q('xpath=//' + tag + '[' + predicate + ']')})"
+        return f"locator({repr('xpath=//' + tag + '[' + predicate + ']')})"
     if xpath := target.get("xpath"):
-        return f"locator({_q(f'xpath={xpath}')})"
+        return f"locator({repr(f'xpath={xpath}')})"
 
     raise ValueError(f"Cannot derive locator command from target: {target}")
 
@@ -75,7 +71,7 @@ def _action_params(row: dict[str, Any]) -> dict[str, Any]:
     name = row.get("action_name")
     allowed = {
         "input": {"index", "text", "clear"},
-        "click": {"index", "button", "click_count"},
+        "click": {"index"},
         "wait": {"seconds"},
         "done": {"success"},
     }
@@ -110,7 +106,8 @@ def _compile_row(row: dict[str, Any]) -> dict[str, Any] | None:
     if name == "wait":
         seconds = params.get("seconds")
         if (
-            type(seconds) not in (int, float)
+            not isinstance(seconds, (int, float))
+            or isinstance(seconds, bool)
             or not math.isfinite(seconds)
             or not 0 <= seconds <= 60
         ):
@@ -162,18 +159,6 @@ def _compile_row(row: dict[str, Any]) -> dict[str, Any] | None:
             "skip_prompt": True,
             "assert_locator_presence": True,
         }
-        if button := params.get("button"):
-            if button not in {"left", "right", "middle"}:
-                raise ValueError(f"Unsupported click button {button!r}: {row}")
-            click["button"] = button
-        click_count = params.get("click_count")
-        if click_count is not None:
-            if type(click_count) is not int:
-                raise ValueError("Unsupported click_count: expected integer")
-            if click_count == 2:
-                click["double_click"] = True
-            elif click_count != 1:
-                raise ValueError(f"Unsupported click_count {click_count!r}: {row}")
         return {
             "type": "action_node",
             "interaction_action": {
@@ -198,7 +183,7 @@ def _read_trace(path: Path) -> list[dict[str, Any]]:
             if not isinstance(row, dict):
                 raise ValueError("Trace row must be an object")
             rows.append(row)
-        except Exception as exc:
+        except ValueError as exc:
             raise ValueError(f"Invalid trace row {line_number}: {exc}") from exc
     return rows
 

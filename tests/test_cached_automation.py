@@ -111,25 +111,15 @@ class CompilerTests(unittest.TestCase):
                 ]
             )
 
-    def test_boolean_click_count_rejected(self):
-        with self.assertRaisesRegex(ValueError, "click_count"):
-            self.compile(
-                [
-                    row("click", action={"click": {"index": 1, "click_count": True}}),
-                    done(),
-                ]
-            )
-
-    def test_click_options_preserved(self):
-        node = _compile_row(
-            row(
-                "click",
-                action={"click": {"index": 1, "button": "right", "click_count": 2}},
-            )
-        )
-        action = node["interaction_action"]["click_element"]
-        self.assertEqual(action["button"], "right")
-        self.assertTrue(action["double_click"])
+    def test_unsupported_click_options_rejected(self):
+        for options in ({"button": "right"}, {"click_count": 2}, {"click_count": True}):
+            with (
+                self.subTest(options=options),
+                self.assertRaisesRegex(ValueError, "Unsupported click parameters"),
+            ):
+                self.compile(
+                    [row("click", action={"click": {"index": 1, **options}}), done()]
+                )
 
     def test_invalid_wait_rejected(self):
         for seconds in (True, -1, 61, float("inf"), float("nan")):
@@ -218,6 +208,21 @@ class CompilerTests(unittest.TestCase):
 
 
 class ReplayPolicyTests(unittest.IsolatedAsyncioTestCase):
+    async def test_agent_handler_imports_without_optional_trace_module(self):
+        import importlib
+        import sys
+        from unittest.mock import patch
+
+        from optexity.inference.core.interaction import handle_agentic_task
+
+        module_name = "browser_use.agent.optexity_step_cache"
+        try:
+            with patch.dict(sys.modules, {module_name: None}):
+                importlib.reload(handle_agentic_task)
+                self.assertIsNone(handle_agentic_task.trace_actions_to)
+        finally:
+            importlib.reload(handle_agentic_task)
+
     async def test_locator_failure_never_calls_classifier(self):
         import os
 

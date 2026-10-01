@@ -11,6 +11,7 @@ from pathlib import Path
 
 from optexity.schema.automation import Automation
 from optexity.schema.task import Task
+from optexity.schema.types import CompanyID, RecordingID, TaskID, UserID
 
 os.environ.setdefault("DEPLOYMENT", "dev")
 os.environ.setdefault("OPTEXITY_API_KEY", "local")
@@ -26,10 +27,10 @@ def _build_task(
 ) -> Task:
     now = datetime.now(timezone.utc)
     task = Task(
-        task_id=str(uuid.uuid4()),
-        user_id=str(uuid.uuid4()),
-        recording_id=str(uuid.uuid4()),
-        endpoint_name="local/test_automation",
+        task_id=TaskID(str(uuid.uuid4())),
+        user_id=UserID(str(uuid.uuid4())),
+        recording_id=RecordingID(str(uuid.uuid4())),
+        endpoint_name="local/automation",
         automation=automation,
         input_parameters=automation.parameters.input_parameters,
         secure_parameters=automation.parameters.secure_parameters,
@@ -38,7 +39,7 @@ def _build_task(
         status="queued",
         save_directory=save_directory,
         api_key="local",
-        company_id=str(uuid.uuid4()),
+        company_id=CompanyID(str(uuid.uuid4())),
         llm_model_name=model,
         is_browser=True,
     )
