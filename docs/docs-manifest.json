@@ -4,6 +4,41 @@
     "description": "Navigation manifest for the Optexity documentation set. An LLM should read this first to decide which documents to open for any given query.",
     "documents": [
         {
+            "id": "docs-advanced-strict-replay",
+            "path": "docs/advanced/strict-replay.mdx",
+            "title": "Strict Replay",
+            "summary": "Compile browser-use execution evidence into strict native actions and audit outcome checks before bounded action minimization.",
+            "gist": "Capture resolved targets, compile strict actions, verify zero-model execution, and minimize resettable workflows against independent assertions.",
+            "keywords": [
+                "strict_replay",
+                "browser-use",
+                "action trace",
+                "replay",
+                "outcome assertions",
+                "minimization"
+            ],
+            "document_type": "guide",
+            "tags": ["advanced", "browser", "testing"],
+            "relationships": {
+                "depends_on": ["docs-advanced-locators"],
+                "references": [
+                    {
+                        "doc_id": "docs-action-types-python-script-action",
+                        "context": "Defines independent outcome assertions."
+                    }
+                ],
+                "referenced_by": []
+            },
+            "entities": {
+                "systems": ["Optexity", "browser-use"],
+                "apis": [],
+                "data_models": ["InteractionAction", "ReplayContract"]
+            },
+            "reading_priority": 4,
+            "when_to_use": "Use when compiling learned browser actions, preventing LLM recovery, or verifying action deletion experiments.",
+            "embedding_hint": "strict deterministic replay browser-use JSONL resolved targets oracle mutation action minimization"
+        },
+        {
             "id": "examples-example-workflows-if-else-and-email-2fa",
             "path": "examples/example_workflows/if-else-and-email-2fa.mdx",
             "title": "CoverMyMeds Request Lookup with Login and Email 2FA",

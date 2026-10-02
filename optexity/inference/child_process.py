@@ -36,6 +36,7 @@ from optexity.inference.core.logging import (
 )
 from optexity.inference.infra.actual_browser import ActualBrowser
 from optexity.inference.infra.browser_health import consume_browser_restart_request
+from optexity.schema.automation import Automation
 from optexity.schema.enums import ExitCodes
 from optexity.schema.inference import InferenceRequest
 from optexity.schema.memory import Memory, SystemInfo
@@ -587,6 +588,22 @@ async def task_processor():
                 fetch_success = task.automation is not None
                 if not fetch_success:
                     automation_error = "Task allocated without an automation"
+
+            # An explicit override must validate before replacing the allocated workflow.
+            local_automation_path = os.environ.get("OPTEXITY_LOCAL_AUTOMATION")
+            if local_automation_path:
+                try:
+                    with open(local_automation_path) as local_file:
+                        task.automation = Automation.model_validate(
+                            json.load(local_file)
+                        )
+                    fetch_success = True
+                    logger.info(
+                        "Loaded local automation from %s", local_automation_path
+                    )
+                except (OSError, ValueError) as local_error:
+                    fetch_success = False
+                    automation_error = f"Invalid local automation: {local_error}"
 
             if not fetch_success:
                 logger.error(

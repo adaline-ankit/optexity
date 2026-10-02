@@ -64,6 +64,7 @@
                         "pages": [
                             "/docs/advanced/timing-retries",
                             "/docs/advanced/locators",
+                            "/docs/advanced/strict-replay",
                             "/docs/advanced/downloads-files",
                             "/docs/advanced/best-practices",
                             "/docs/advanced/callbacks",
