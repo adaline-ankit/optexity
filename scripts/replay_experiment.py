@@ -247,9 +247,21 @@ class LocalEvaluator:
     """Run each trial in a separate process using an unused worker ID."""
 
     def __init__(
-        self, directory: Path, timeout: float = 120, child_process_id: int = 81
+        self,
+        directory: Path,
+        timeout: float = 120,
+        child_process_id: int = 81,
+        *,
+        model: str | None = None,
+        max_model_calls: int | None = None,
+        trace_objective: str | None = None,
     ):
-        self.directory = directory
+        self.model = model
+        self.max_model_calls = max_model_calls
+        self.trace_objective = trace_objective
+        if model is not None and (max_model_calls is None or max_model_calls < 1):
+            raise ValueError("Learning requires a positive model call budget")
+        self.directory = directory.resolve()
         self.timeout = timeout
         self.child_process_id = child_process_id
 
@@ -258,24 +270,38 @@ class LocalEvaluator:
         directory.mkdir()
         source = directory / "automation.json"
         source.write_text(json.dumps(automation, indent=2) + "\n")
-        runner = Path(__file__).with_name("run_local_automation.py")
         env = os.environ | {"OPTEXITY_API_KEY": "local", "DEPLOYMENT": "dev"}
-        env.pop("OPENAI_API_KEY", None)
+        options = ["--forbid-llm"]
+        if self.model is not None:
+            options = [
+                "--model",
+                self.model,
+                "--max-model-calls",
+                str(self.max_model_calls),
+                "--max-output-tokens",
+                "3000",
+            ]
+        else:
+            env.pop("OPENAI_API_KEY", None)
+        if self.trace_objective is not None:
+            options.extend(["--trace-objective", self.trace_objective])
         with (directory / "runner.log").open("w") as log:
             process = await asyncio.create_subprocess_exec(
                 sys.executable,
-                str(runner),
+                "-m",
+                "scripts.run_local_automation",
                 str(source),
                 "--output-dir",
                 str(directory / "run"),
                 "--offline",
-                "--forbid-llm",
+                *options,
                 "--child-process-id",
                 str(self.child_process_id),
                 stdout=log,
                 stderr=log,
                 env=env,
                 start_new_session=True,
+                cwd=Path(__file__).resolve().parents[1],
             )
             try:
                 await asyncio.wait_for(process.wait(), timeout=self.timeout)

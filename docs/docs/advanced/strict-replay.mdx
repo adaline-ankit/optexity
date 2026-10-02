@@ -105,6 +105,74 @@ It does not infer parameter templates, search for caches, repair drift, bind tra
 to origins, or prove that no intermediate trace row was lost. Treat traces as
 trusted local inputs and verify the generated workflow's postconditions.
 
+## Generate replay with a model
+
+Use execution evidence and local documentation to propose native JSON:
+
+```bash
+python -m scripts.generate_cached_automation \
+  --baseline tests/fixtures/replay/form.json \
+  --trace tests/fixtures/replay/form_trace.jsonl \
+  --out /tmp/form_candidate.json
+```
+
+Set `OPENAI_API_KEY` privately, or pass `--env-file /path/to/.env`. Generation
+uses the existing `ChatLiteLLM` adapter. The request includes the action trace,
+interaction and locator documentation, a Pydantic response schema, and the native
+actions supported by that trace. Output is validated as both `ReplayProposal`
+and `Automation`.
+
+The model may retain an ordered subset of observed actions. It cannot invent
+locators or values, reorder actions, enable fallback, or edit surrounding nodes.
+This makes the deterministic compiler a semantic boundary rather than relying on
+schema validation alone. A deletion remains unverified until replay passes the
+original assertions; the `.generation.json` receipt explicitly records this.
+
+## Learn and improve from fresh execution
+
+Run the complete loop on a trusted, resettable workflow:
+
+```bash
+python -m scripts.learn_replay tests/fixtures/replay/form.json \
+  --output-dir /tmp/form_learning_loop --resettable \
+  --learning-calls 4 --rounds 2 --child-process-id 83
+```
+
+Use a new output directory for each experiment. The baseline must start with one
+agentic task and end with independent Python outcome assertions. The harness
+cannot determine whether those assertions are sufficiently strong; audit them
+with the corruption experiment below.
+
+| Stage | Evidence and acceptance |
+| --- | --- |
+| Learn | Run the existing agentic handler; require success and one trace |
+| Generate | Supply that trace, native action candidates, docs, and schema to the model |
+| Execute | Run the candidate through existing native handlers with model calls blocked |
+| Recapture | Observe locator resolution in the native handler; append a successful terminal record only after the complete workflow passes |
+| Validate | Recompile the fresh trace, require a new run ID and the expected action count |
+| Repeat | Generate from the new trace; stop on unchanged JSON, failed validation/execution, or the round limit |
+| Checkpoint | Keep the last verified `optimized.json`; retain all round receipts in `report.json` |
+
+The native capture hooks exist only inside the standalone runner process and are
+restored on exit. Capture reuses the companion trace writer and its redaction
+policy. Only supported input, left-click, and wait semantics can be recaptured.
+
+| Budget | Default and scope |
+| --- | --- |
+| Learning calls | At most 4 provider invocations; configurable from 1 to 10 |
+| Proposal rounds | At most 2; configurable from 1 to 5; one call per proposal |
+| Output per call | At most 3,000 tokens |
+| Proposal input | At most 100,000 serialized characters, including docs and trace |
+| Provider retry/fallback | Disabled for bounded learning and generation |
+| Native replay | Zero permitted model calls; measured attempts must also be zero |
+
+These limits bound calls and proposal size, not a fixed dollar amount. Learning
+input size depends on browser state. The harness reports elapsed time but does
+not promote a workflow merely because one noisy timing sample is faster.
+A later failed round leaves the last successful checkpoint available and records
+the stop reason. This loop reduces repeated inference and can remove redundant
+actions; it does not repair changed pages or prove equivalence of hidden effects.
+
 ## Audit outcome checks and minimize actions
 
 `scripts/replay_experiment.py` tests whether actions can be removed while preserving

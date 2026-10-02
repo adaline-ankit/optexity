@@ -5,7 +5,7 @@ import logging
 import os
 import time
 import uuid
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -73,12 +73,21 @@ def _patch_offline_server_calls() -> None:
 
 
 @contextmanager
-def measure_llm_calls(forbid: bool):
+def measure_llm_calls(
+    forbid: bool,
+    *,
+    max_calls: int | None = None,
+    max_output_tokens: int | None = None,
+):
     """Measure the engine's LiteLLM boundary, including failed attempts.
 
     This is a local harness, not a network firewall. Both current Optexity model
     adapters route calls here. New SDK integrations need their own guard.
     """
+    if max_calls is not None and max_calls < 1:
+        raise ValueError("max_calls must be positive")
+    if max_output_tokens is not None and max_output_tokens < 1:
+        raise ValueError("max_output_tokens must be positive")
     from unittest.mock import patch
 
     import litellm
@@ -86,10 +95,19 @@ def measure_llm_calls(forbid: bool):
     metrics = {"attempts": 0, "prompt_tokens": 0, "completion_tokens": 0}
     original_sync, original_async = litellm.completion, litellm.acompletion
 
-    def begin():
+    def begin(kwargs):
         metrics["attempts"] += 1
         if forbid:
             raise RuntimeError("LLM call forbidden during deterministic replay")
+        if max_calls is not None and metrics["attempts"] > max_calls:
+            raise RuntimeError("Model call budget exhausted")
+        if max_output_tokens is not None:
+            kwargs["max_tokens"] = min(
+                kwargs.get("max_tokens") or max_output_tokens, max_output_tokens
+            )
+        if max_calls is not None:
+            # Internal retries/fallbacks would bypass this call budget.
+            kwargs.update(num_retries=0, fallbacks=[], timeout=45)
 
     def finish(response):
         usage = getattr(response, "usage", None)
@@ -98,11 +116,11 @@ def measure_llm_calls(forbid: bool):
         return response
 
     def sync(*args, **kwargs):
-        begin()
+        begin(kwargs)
         return finish(original_sync(*args, **kwargs))
 
     async def asynchronous(*args, **kwargs):
-        begin()
+        begin(kwargs)
         return finish(await original_async(*args, **kwargs))
 
     with (
@@ -132,6 +150,16 @@ async def _run(args: argparse.Namespace) -> int:
     if args.offline:
         _patch_offline_server_calls()
 
+    capture = None
+    if args.trace_objective is not None:
+        from scripts.replay_capture import NativeReplayCapture
+
+        if not args.forbid_llm:
+            raise ValueError("Native capture requires --forbid-llm")
+        capture = NativeReplayCapture(
+            task.task_directory / "native_trace", args.trace_objective
+        )
+
     start = time.perf_counter()
     llm_metrics = {}
     try:
@@ -144,7 +172,14 @@ async def _run(args: argparse.Namespace) -> int:
         if cdp_url is None:
             raise RuntimeError("Actual browser did not expose CDP URL")
 
-        with measure_llm_calls(args.forbid_llm) as llm_metrics:
+        with (
+            measure_llm_calls(
+                args.forbid_llm,
+                max_calls=args.max_model_calls,
+                max_output_tokens=args.max_output_tokens,
+            ) as llm_metrics,
+            capture if capture is not None else nullcontext(),
+        ):
             await run_automation(
                 task=task,
                 unique_child_arn=unique_child_arn,
@@ -152,6 +187,10 @@ async def _run(args: argparse.Namespace) -> int:
                 cdp_url=cdp_url,
                 max_tries=1,
             )
+            if capture is not None:
+                capture.finish(
+                    task.status == "success" and llm_metrics["attempts"] == 0
+                )
     finally:
         await restart_global_actual_browser("local runner cleanup")
 
@@ -164,6 +203,7 @@ async def _run(args: argparse.Namespace) -> int:
         "task_directory": str(task.task_directory),
         "log_file": str(task.log_file_path),
         "llm": llm_metrics,
+        "trace_path": str(capture.path) if capture is not None else None,
         "timing_scope": "browser setup, execution, outcome assertions, final logging and cleanup",
     }
     if args.forbid_llm and llm_metrics.get("attempts"):
@@ -183,6 +223,9 @@ def main() -> None:
     parser.add_argument("--model", default=None)
     parser.add_argument("--child-process-id", type=int, default=0)
     parser.add_argument("--forbid-llm", action="store_true")
+    parser.add_argument("--trace-objective")
+    parser.add_argument("--max-model-calls", type=int)
+    parser.add_argument("--max-output-tokens", type=int)
     parser.add_argument(
         "--offline", action=argparse.BooleanOptionalAction, default=True
     )
