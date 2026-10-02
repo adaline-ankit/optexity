@@ -163,10 +163,14 @@ async def run_interaction_action(
         elif interaction_action.scroll:
             await handle_scroll(interaction_action.scroll, memory, browser)
     except ElementNotFoundInAxtreeException as e:
+        if interaction_action.strict_replay:
+            raise
         await handle_element_not_found_in_axtree(
             e, interaction_action, task, memory, browser
         )
     except AssertLocatorPresenceException as e:
+        if interaction_action.strict_replay:
+            raise
         await handle_assert_locator_presence_error(
             e, interaction_action, task, memory, browser, retries_left
         )

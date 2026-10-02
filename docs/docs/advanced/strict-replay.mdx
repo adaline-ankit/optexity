@@ -1,0 +1,241 @@
+---
+title: Strict Replay
+description: Compile browser-use execution traces into native actions and verify them without model calls
+---
+
+Reuse successful browser-use actions as native Optexity input and click steps.
+Strict replay stops when a locator fails instead of invoking adaptive recovery.
+Keep independent outcome assertions after the replay so a completed action sequence
+must still produce the expected result.
+
+## Replay an existing trace
+
+Run these commands from the repository root in an environment with Optexity
+installed. The included fixtures cover a form and a two-page navigation sequence.
+
+```bash
+python -m scripts.compile_cached_automation \
+  --baseline tests/fixtures/replay/form.json \
+  --trace tests/fixtures/replay/form_trace.jsonl \
+  --out /tmp/form_replay.json
+python -m scripts.run_local_automation /tmp/form_replay.json \
+  --output-dir /tmp/form_replay_run --offline --forbid-llm \
+  --child-process-id 81
+```
+
+Use an unused worker ID: local browser ports are derived from that ID. These
+fixtures use Chrome and external test sites; the browser regression tests use
+local HTML instead. Replace `form` with `navigation` in the fixture paths to
+compile the navigation example.
+
+The compiler writes native automation JSON and a `.provenance.json` sidecar with
+input hashes and action decisions. The runner writes `run_result.json` under its
+task directory, including status, errors, elapsed time, and measured model calls.
+Generated outputs belong outside the source tree.
+
+## Strict action policy
+
+```json
+{
+  "interaction_action": {
+    "strict_replay": true,
+    "max_tries": 1,
+    "input_text": {
+      "command": "get_by_label('Full name', exact=True)",
+      "input_text": "Ada Lovelace",
+      "skip_prompt": true,
+      "assert_locator_presence": true
+    }
+  }
+}
+```
+
+| Setting | Requirement |
+| --- | --- |
+| `strict_replay` | Defaults to `false`; enables command-only input or click actions |
+| `command` | Required; `skip_command` must be false |
+| `skip_prompt` | Must be true |
+| `assert_locator_presence` | Must be true |
+| `input_text` | Explicit text required for input actions |
+| `max_tries` | Compiled actions use one attempt |
+
+Execution reuses the existing command handlers, locator resolution, input/click
+implementation, parameter substitution, and task logging. Strict locator failures
+propagate before the outer LLM error classifier runs. Surrounding setup and
+assertion nodes remain unchanged and can have their own behavior.
+
+`--forbid-llm` counts and blocks calls through the engine's current LiteLLM sync
+and async interfaces during automation execution. It is a verification harness,
+not a network sandbox or a guard for arbitrary SDK calls in user Python scripts.
+`--offline` suppresses task uploads and callbacks; browser network access remains
+available.
+
+## Capture new execution evidence
+
+Install the companion `optexity-browser-use` revision providing
+`browser_use.agent.optexity_step_cache.trace_actions_to`. Older distributions can
+still execute agentic tasks, but emit a warning and cannot produce replay traces.
+
+Run a baseline containing exactly one top-level `agentic_task` with the local
+runner. The handler writes `step_cache/browser_use_trace.jsonl` beneath that
+step's log directory. For direct browser-use integration, wrap `agent.run()` with
+`trace_actions_to(directory)`; each context gets an isolated run ID.
+
+A tool resolves its temporary DOM index, snapshots the actual target before
+execution, and attaches execution metadata after success. The agent then appends
+a JSONL row. The trace stores locator attributes, action semantics, task hash,
+run ID, action order, and result flags. It omits model prose, raw DOM values,
+and error text. Sensitive-input hints and the tool's sensitivity flag redact
+input text; this is not comprehensive personal-data detection.
+
+| Compilation gate | Behavior |
+| --- | --- |
+| Objective and run | Require the exact baseline task hash and one run ID |
+| Completion | Require one terminal successful `done` result |
+| Action order | Reject duplicate or reversed positions |
+| Input/click | Require tool-confirmed execution and a resolved document target |
+| Input mode | Preserve replacement versus append behavior |
+| Wait | Preserve the requested bounded delay as a native sleep |
+| Unknown actions/options | Reject instead of guessing semantics |
+| Frame/shadow targets | Reject; document locators cannot preserve their scope |
+| Sensitive input | Reject redacted traces; provide a reviewed secure-parameter workflow separately |
+
+Compilation replaces only the agentic node and drops terminal `done` bookkeeping.
+It does not infer parameter templates, search for caches, repair drift, bind traces
+to origins, or prove that no intermediate trace row was lost. Treat traces as
+trusted local inputs and verify the generated workflow's postconditions.
+
+## Generate replay with a model
+
+Use execution evidence and local documentation to propose native JSON:
+
+```bash
+python -m scripts.generate_cached_automation \
+  --baseline tests/fixtures/replay/form.json \
+  --trace tests/fixtures/replay/form_trace.jsonl \
+  --out /tmp/form_candidate.json
+```
+
+Set `OPENAI_API_KEY` privately, or pass `--env-file /path/to/.env`. Generation
+uses the existing `ChatLiteLLM` adapter. The request includes the action trace,
+interaction and locator documentation, a Pydantic response schema, and the native
+actions supported by that trace. Output is validated as both `ReplayProposal`
+and `Automation`.
+
+The model may retain an ordered subset of observed actions. It cannot invent
+locators or values, reorder actions, enable fallback, or edit surrounding nodes.
+This makes the deterministic compiler a semantic boundary rather than relying on
+schema validation alone. A deletion remains unverified until replay passes the
+original assertions; the `.generation.json` receipt explicitly records this.
+
+## Learn and improve from fresh execution
+
+Run the complete loop on a trusted, resettable workflow:
+
+```bash
+python -m scripts.learn_replay tests/fixtures/replay/form.json \
+  --output-dir /tmp/form_learning_loop --resettable \
+  --learning-calls 4 --rounds 2 --child-process-id 83
+```
+
+Use a new output directory for each experiment. The baseline must start with one
+agentic task and end with independent Python outcome assertions. The harness
+cannot determine whether those assertions are sufficiently strong; audit them
+with the corruption experiment below.
+
+| Stage | Evidence and acceptance |
+| --- | --- |
+| Learn | Run the existing agentic handler; require success and one trace |
+| Generate | Supply that trace, native action candidates, docs, and schema to the model |
+| Execute | Run the candidate through existing native handlers with model calls blocked |
+| Recapture | Observe locator resolution in the native handler; append a successful terminal record only after the complete workflow passes |
+| Validate | Recompile the fresh trace, require a new run ID and the expected action count |
+| Repeat | Generate from the new trace; stop on unchanged JSON, failed validation/execution, or the round limit |
+| Checkpoint | Keep the last verified `optimized.json`; retain all round receipts in `report.json` |
+
+The native capture hooks exist only inside the standalone runner process and are
+restored on exit. Capture reuses the companion trace writer and its redaction
+policy. Only supported input, left-click, and wait semantics can be recaptured.
+
+| Budget | Default and scope |
+| --- | --- |
+| Learning calls | At most 4 provider invocations; configurable from 1 to 10 |
+| Proposal rounds | At most 2; configurable from 1 to 5; one call per proposal |
+| Output per call | At most 3,000 tokens |
+| Proposal input | At most 100,000 serialized characters, including docs and trace |
+| Provider retry/fallback | Disabled for bounded learning and generation |
+| Native replay | Zero permitted model calls; measured attempts must also be zero |
+
+These limits bound calls and proposal size, not a fixed dollar amount. Learning
+input size depends on browser state. The harness reports elapsed time but does
+not promote a workflow merely because one noisy timing sample is faster.
+A later failed round leaves the last successful checkpoint available and records
+the stop reason. This loop reduces repeated inference and can remove redundant
+actions; it does not repair changed pages or prove equivalence of hidden effects.
+
+## Audit outcome checks and minimize actions
+
+`scripts/replay_experiment.py` tests whether actions can be removed while preserving
+user-supplied outcome checks. Use only trusted, resettable workflows: each trial
+opens a fresh browser, but cannot undo writes to an external service.
+
+Generate the reproducible form fixture and its check contract:
+
+```bash
+python tests/replay_fixtures.py --output-dir /tmp/form_experiment
+python -m scripts.replay_experiment \
+  /tmp/form_experiment/strict_form.json \
+  /tmp/form_experiment/form_contract.json \
+  --output-dir /tmp/form_experiment_results --max-runs 100
+```
+
+| Contract field | Meaning |
+| --- | --- |
+| `resettable` | Required explicit declaration that repeated trials are safe |
+| `cases` | Nonempty set of uniquely named input datasets |
+| `input_parameters` | Parameter values for each case |
+| `oracle` | Unchanged Python-script action asserting the intended result |
+| `probes` | Strict input actions that corrupt an outcome and name the exact expected assertion error |
+
+The experiment first verifies the baseline repeatedly. It then requires an empty
+replay and each corruption probe to fail the intended checks. A browser crash,
+missing measurement, unexpected error, or attempted model call aborts promotion.
+
+The search removes one action at a time and restarts after each accepted deletion.
+Every candidate must pass every case repeatedly. Final verification reruns both
+positive outcomes and corruption probes. Only then does the CLI write
+`optimized.json`, including the first verified dataset and its unchanged oracle.
+`report.json` retains the trial decisions. Timeout, cancellation, or budget
+exhaustion cannot promote a partial result.
+
+The result is a greedy fixed point for the supplied cases, not a globally shortest
+workflow or proof that hidden side effects are equivalent. Strong assertions and
+representative data matter more than the number of removed actions.
+
+## Tool boundaries
+
+| Module | Responsibility |
+| --- | --- |
+| `compile_cached_automation` | Validate evidence and map supported actions to native schema |
+| `generate_cached_automation` | Build a docs-grounded model request and validate proposed actions |
+| `learn_replay` | Control fresh-evidence iterations and verified checkpoints |
+| `replay_capture` | Observe native execution and reuse the trace writer |
+| `replay_experiment` | Audit outcome checks and search action deletions |
+| `replay_runner` | Isolate processes, enforce deadlines, and validate execution receipts |
+| `llm_guard` | Measure and bound calls at the existing model boundary |
+| `run_local_automation` | Adapt CLI input to the existing Optexity engine |
+
+Invoke these developer tools with `python -m scripts.<module>` from the repository
+root. The shared modules have no CLI setup side effects.
+
+## Local worker override
+
+Set `OPTEXITY_LOCAL_AUTOMATION` to a validated local JSON file to override an
+allocated task's workflow on that worker. An invalid override fails the task.
+Use a dedicated local worker; this setting applies to every allocated task while
+present and does not change the hosted schema.
+
+See [Locators](/docs/advanced/locators),
+[Parameters](/docs/building-automations/parameters), and
+[Python Script Action](/docs/action-types/python-script-action) for the underlying
+native actions and assertions.

@@ -380,6 +380,7 @@ class CloseOverlayPopupAction(AgenticTask):
 
 
 class InteractionAction(BaseModel):
+    strict_replay: bool = False
     max_tries: int = 10
     max_timeout_seconds_per_try: float = 1.0
     verify_before_step: bool = True
@@ -431,6 +432,22 @@ class InteractionAction(BaseModel):
             raise ValueError(
                 "Exactly one of click_element, input_text, select_option, check, uncheck, hover, download_url_as_pdf, scroll, upload_file, go_to_url, go_back, switch_tab, close_current_tab, close_all_but_last_tab, close_tabs_until, key_press, or agentic_task must be provided"
             )
+
+        if self.strict_replay:
+            action = self.input_text or self.click_element
+            if (
+                action is None
+                or not action.command
+                or action.skip_command
+                or not action.skip_prompt
+                or not action.assert_locator_presence
+            ):
+                raise ValueError(
+                    "strict_replay requires a command-only input or click "
+                    "with asserted locator"
+                )
+            if self.input_text and self.input_text.input_text is None:
+                raise ValueError("strict_replay input requires explicit text")
 
         if not self.max_tries and (
             (self.click_element and self.click_element.skip_prompt)

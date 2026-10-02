@@ -1,0 +1,30 @@
+{
+    "browser_channel": "chrome",
+    "backend": "browser-use",
+    "url": "https://books.toscrape.com/",
+    "parameters": {
+        "input_parameters": {},
+        "secure_parameters": {},
+        "generated_parameters": {}
+    },
+    "nodes": [
+        {
+            "type": "action_node",
+            "interaction_action": {
+                "agentic_task": {
+                    "task": "Click Travel in the category sidebar, then click the book title It's Only the Himalayas to open its detail page. Use page clicks, not direct URL navigation. Stop when the product detail page is visible.",
+                    "max_steps": 8,
+                    "backend": "browser_use"
+                }
+            },
+            "end_sleep_time": 0
+        },
+        {
+            "type": "action_node",
+            "python_script_action": {
+                "execution_code": "async def code_fn(page):\n    from patchright.async_api import expect\n    await expect(page).to_have_url('https://books.toscrape.com/catalogue/its-only-the-himalayas_981/index.html', timeout=5000)\n    await expect(page.locator('.product_main h1')).to_have_text(\"It's Only the Himalayas\", timeout=5000)\n    await expect(page.get_by_text('Product Information', exact=True)).to_be_visible(timeout=5000)\n"
+            },
+            "end_sleep_time": 0
+        }
+    ]
+}
